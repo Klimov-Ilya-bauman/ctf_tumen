@@ -1,0 +1,4 @@
+.DS_Store
+vuln*
+*.pem
+*.key
