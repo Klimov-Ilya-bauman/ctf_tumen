@@ -1,0 +1,40 @@
+\set ON_ERROR_STOP on
+\getenv slopdns_iam_owner_password SLOPDNS_IAM_OWNER_DB_PASSWORD
+\getenv slopdns_backend_owner_password SLOPDNS_BACKEND_OWNER_DB_PASSWORD
+\getenv slopdns_iam_password SLOPDNS_IAM_DB_PASSWORD
+\getenv slopdns_backend_password SLOPDNS_BACKEND_DB_PASSWORD
+\getenv slopdns_sync_password SLOPDNS_SYNC_DB_PASSWORD
+
+CREATE ROLE slopdns_iam_owner LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS PASSWORD :'slopdns_iam_owner_password';
+CREATE ROLE slopdns_backend_owner LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS PASSWORD :'slopdns_backend_owner_password';
+CREATE ROLE slopdns_iam LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS PASSWORD :'slopdns_iam_password';
+CREATE ROLE slopdns_backend LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS PASSWORD :'slopdns_backend_password';
+CREATE ROLE slopdns_sync LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS PASSWORD :'slopdns_sync_password';
+
+REVOKE ALL ON DATABASE :"DBNAME" FROM PUBLIC;
+REVOKE CONNECT ON DATABASE postgres FROM PUBLIC;
+REVOKE CONNECT ON DATABASE template1 FROM PUBLIC;
+GRANT CONNECT ON DATABASE :"DBNAME" TO slopdns_iam_owner, slopdns_backend_owner, slopdns_iam, slopdns_backend, slopdns_sync;
+
+REVOKE ALL ON SCHEMA public FROM PUBLIC;
+
+CREATE SCHEMA iam AUTHORIZATION slopdns_iam_owner;
+CREATE SCHEMA backend AUTHORIZATION slopdns_backend_owner;
+
+REVOKE ALL ON SCHEMA iam FROM PUBLIC;
+REVOKE ALL ON SCHEMA backend FROM PUBLIC;
+
+GRANT USAGE ON SCHEMA iam TO slopdns_iam;
+GRANT USAGE ON SCHEMA backend TO slopdns_backend;
+GRANT USAGE ON SCHEMA backend TO slopdns_sync;
+
+ALTER DEFAULT PRIVILEGES FOR ROLE slopdns_iam_owner IN SCHEMA iam GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO slopdns_iam;
+ALTER DEFAULT PRIVILEGES FOR ROLE slopdns_iam_owner IN SCHEMA iam GRANT USAGE, SELECT ON SEQUENCES TO slopdns_iam;
+ALTER DEFAULT PRIVILEGES FOR ROLE slopdns_backend_owner IN SCHEMA backend GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO slopdns_backend;
+ALTER DEFAULT PRIVILEGES FOR ROLE slopdns_backend_owner IN SCHEMA backend GRANT USAGE, SELECT ON SEQUENCES TO slopdns_backend;
+
+ALTER ROLE slopdns_iam_owner IN DATABASE :"DBNAME" SET search_path = iam;
+ALTER ROLE slopdns_iam IN DATABASE :"DBNAME" SET search_path = iam;
+ALTER ROLE slopdns_backend_owner IN DATABASE :"DBNAME" SET search_path = backend;
+ALTER ROLE slopdns_backend IN DATABASE :"DBNAME" SET search_path = backend;
+ALTER ROLE slopdns_sync IN DATABASE :"DBNAME" SET search_path = backend;

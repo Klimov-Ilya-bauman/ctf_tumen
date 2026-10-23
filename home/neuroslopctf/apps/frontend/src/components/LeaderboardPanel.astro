@@ -1,0 +1,36 @@
+---
+interface Props { limit?:number }
+const {limit=5}=Astro.props;
+---
+<section class="leaderboard-card card" data-leaderboard-panel data-limit={limit} data-aos="fade-left">
+  <div class="panel-head"><div><div class="eyebrow">Краткий обзор рейтинга</div><h2 class="panel-title">Таблица результатов</h2></div></div>
+  <label class="micro-label" for="hero-competition">Соревнование</label>
+  <select class="select-input" id="hero-competition" data-leaderboard-competition aria-label="Соревнование для рейтинга" hidden></select>
+  <div data-leaderboard-content aria-busy="true"><p class="status-message" role="status">Загружаем рейтинг участников…</p></div>
+</section>
+<script>
+  import {listCompetitions,scoreboard} from '../lib/endpoints';
+  import {h,link,empty} from '../lib/dom';
+  import {region} from '../lib/ui/common';
+  const root=document.querySelector<HTMLElement>('[data-leaderboard-panel]')!;
+  const content=root.querySelector<HTMLElement>('[data-leaderboard-content]')!;
+  const select=root.querySelector<HTMLSelectElement>('[data-leaderboard-competition]')!;
+  const load=()=>region(content,async()=>{
+    const board=await scoreboard(select.value,{limit:Number(root.dataset.limit)});
+    content.replaceChildren();
+    if(board.frozen)content.append(h('p',{class:'field-hint'},'Рейтинг заморожен'));
+    const list=h('ol',{class:'leaderboard-list'});
+    for(const row of board.items)list.append(h('li',{class:'leaderboard-row'},
+      h('span',{class:'leaderboard-rank '+(row.rank<=3?'top':'')},row.rank),
+      h('div',{},h('div',{class:'leaderboard-name'},row.name),h('div',{class:'leaderboard-meta'},'Решено: '+row.solved)),
+      h('span',{class:'leaderboard-score'},row.score)));
+    content.append(board.items.length?list:empty(),link('Открыть весь рейтинг →','/c/scoreboard',{c:select.value}));
+  });
+  void region(content,async()=>{
+    const competitions=await listCompetitions({limit:200});
+    const visible=competitions.items.filter(c=>c.visibility==='public'&&['running','frozen','finished'].includes(c.state));
+    if(!visible.length){content.replaceChildren(empty());return;}
+    select.replaceChildren(...visible.map(c=>h('option',{value:c.slug},c.title)));
+    select.hidden=false;select.addEventListener('change',()=>void load());await load();
+  });
+</script>

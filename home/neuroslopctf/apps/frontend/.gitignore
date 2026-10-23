@@ -1,0 +1,10 @@
+node_modules
+.dist
+.astro
+dist
+.DS_Store
+.bin
+dist-demo/
+artifacts/
+
+/data/

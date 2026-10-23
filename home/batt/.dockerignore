@@ -1,0 +1,6 @@
+.git
+backend/target
+frontend/node_modules
+frontend/dist
+.env
+tools

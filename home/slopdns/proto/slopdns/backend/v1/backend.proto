@@ -1,0 +1,42 @@
+syntax = "proto3";
+
+package slopdns.backend.v1;
+
+import "slopdns/sync/v1/sync.proto";
+
+option go_package = "slopdns/web/gen/slopdns/backend/v1;backendv1";
+
+service BackendService {
+  rpc EnsureDefaultOrg(EnsureDefaultOrgRequest) returns (EnsureDefaultOrgResponse);
+  rpc GetResourceOrg(GetResourceOrgRequest) returns (GetResourceOrgResponse);
+}
+
+enum OwnedResourceType {
+  OWNED_RESOURCE_TYPE_UNSPECIFIED = 0;
+  OWNED_RESOURCE_TYPE_ORG = 1;
+  OWNED_RESOURCE_TYPE_ZONE = 2;
+}
+
+message EnsureDefaultOrgRequest {
+  string user_id = 1;
+  string username = 2;
+}
+
+message EnsureDefaultOrgResponse {
+  string org_id = 1;
+  string org_name = 2;
+  bool created = 3;
+}
+
+message GetResourceOrgRequest {
+  OwnedResourceType resource_type = 1;
+  string resource_id = 2;
+}
+
+message GetResourceOrgResponse {
+  string org_id = 1;
+}
+
+message ChangeLogOps {
+  repeated slopdns.sync.v1.Op ops = 1;
+}

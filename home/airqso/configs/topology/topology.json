@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "view_box": [1000, 600],
+  "districts": ["central", "northwestern", "southern", "north_caucasian", "volga", "ural", "siberian", "far_eastern"],
+  "repeaters": [
+    {"id":"50000000-0000-4000-8000-000000000001","pair_id":"51000000-0000-4000-8000-000000000001","district_id":"central","role":"primary","x":109.344,"y":316.230,"radius":360,"enabled":true},
+    {"id":"50000000-0000-4000-8000-000000000002","pair_id":"51000000-0000-4000-8000-000000000001","district_id":"central","role":"backup","x":167.656,"y":256.120,"radius":360,"enabled":true},
+    {"id":"50000000-0000-4000-8000-000000000003","pair_id":"51000000-0000-4000-8000-000000000002","district_id":"northwestern","role":"primary","x":389.410,"y":120.406,"radius":360,"enabled":true},
+    {"id":"50000000-0000-4000-8000-000000000004","pair_id":"51000000-0000-4000-8000-000000000002","district_id":"northwestern","role":"backup","x":430.367,"y":110.745,"radius":360,"enabled":true},
+    {"id":"50000000-0000-4000-8000-000000000005","pair_id":"51000000-0000-4000-8000-000000000003","district_id":"southern","role":"primary","x":92.959,"y":338.190,"radius":360,"enabled":true},
+    {"id":"50000000-0000-4000-8000-000000000006","pair_id":"51000000-0000-4000-8000-000000000003","district_id":"southern","role":"backup","x":14.704,"y":329.780,"radius":360,"enabled":true},
+    {"id":"50000000-0000-4000-8000-000000000007","pair_id":"51000000-0000-4000-8000-000000000004","district_id":"north_caucasian","role":"primary","x":61.658,"y":396.592,"radius":360,"enabled":true},
+    {"id":"50000000-0000-4000-8000-000000000008","pair_id":"51000000-0000-4000-8000-000000000004","district_id":"north_caucasian","role":"backup","x":68.171,"y":377.237,"radius":360,"enabled":true},
+    {"id":"50000000-0000-4000-8000-000000000009","pair_id":"51000000-0000-4000-8000-000000000005","district_id":"volga","role":"primary","x":223.954,"y":317.681,"radius":360,"enabled":true},
+    {"id":"50000000-0000-4000-8000-00000000000a","pair_id":"51000000-0000-4000-8000-000000000005","district_id":"volga","role":"backup","x":144.965,"y":331.457,"radius":360,"enabled":true},
+    {"id":"50000000-0000-4000-8000-00000000000b","pair_id":"51000000-0000-4000-8000-000000000006","district_id":"ural","role":"primary","x":456.734,"y":321.074,"radius":360,"enabled":true},
+    {"id":"50000000-0000-4000-8000-00000000000c","pair_id":"51000000-0000-4000-8000-000000000006","district_id":"ural","role":"backup","x":387.351,"y":358.825,"radius":360,"enabled":true},
+    {"id":"50000000-0000-4000-8000-00000000000d","pair_id":"51000000-0000-4000-8000-000000000007","district_id":"siberian","role":"primary","x":346.103,"y":404.293,"radius":360,"enabled":true},
+    {"id":"50000000-0000-4000-8000-00000000000e","pair_id":"51000000-0000-4000-8000-000000000007","district_id":"siberian","role":"backup","x":340.916,"y":421.037,"radius":360,"enabled":true},
+    {"id":"50000000-0000-4000-8000-00000000000f","pair_id":"51000000-0000-4000-8000-000000000008","district_id":"far_eastern","role":"primary","x":833.059,"y":459.883,"radius":360,"enabled":true},
+    {"id":"50000000-0000-4000-8000-000000000010","pair_id":"51000000-0000-4000-8000-000000000008","district_id":"far_eastern","role":"backup","x":654.342,"y":504.256,"radius":360,"enabled":true}
+  ],
+  "links": [
+    {"from":"50000000-0000-4000-8000-000000000001","to":"50000000-0000-4000-8000-000000000003","bidirectional":true,"weight_ms":983,"enabled":true},
+    {"from":"50000000-0000-4000-8000-000000000001","to":"50000000-0000-4000-8000-000000000009","bidirectional":true,"weight_ms":529,"enabled":true},
+    {"from":"50000000-0000-4000-8000-000000000001","to":"50000000-0000-4000-8000-000000000005","bidirectional":true,"weight_ms":355,"enabled":true},
+    {"from":"50000000-0000-4000-8000-000000000005","to":"50000000-0000-4000-8000-000000000007","bidirectional":true,"weight_ms":433,"enabled":true},
+    {"from":"50000000-0000-4000-8000-000000000005","to":"50000000-0000-4000-8000-000000000009","bidirectional":true,"weight_ms":565,"enabled":true},
+    {"from":"50000000-0000-4000-8000-000000000009","to":"50000000-0000-4000-8000-00000000000b","bidirectional":true,"weight_ms":766,"enabled":true},
+    {"from":"50000000-0000-4000-8000-00000000000b","to":"50000000-0000-4000-8000-00000000000d","bidirectional":true,"weight_ms":577,"enabled":true},
+    {"from":"50000000-0000-4000-8000-00000000000d","to":"50000000-0000-4000-8000-00000000000f","bidirectional":true,"weight_ms":1280,"enabled":true},
+    {"from":"50000000-0000-4000-8000-000000000002","to":"50000000-0000-4000-8000-000000000004","bidirectional":true,"weight_ms":901,"enabled":true},
+    {"from":"50000000-0000-4000-8000-000000000002","to":"50000000-0000-4000-8000-00000000000a","bidirectional":true,"weight_ms":457,"enabled":true},
+    {"from":"50000000-0000-4000-8000-000000000002","to":"50000000-0000-4000-8000-000000000006","bidirectional":true,"weight_ms":640,"enabled":true},
+    {"from":"50000000-0000-4000-8000-000000000006","to":"50000000-0000-4000-8000-000000000008","bidirectional":true,"weight_ms":443,"enabled":true},
+    {"from":"50000000-0000-4000-8000-000000000006","to":"50000000-0000-4000-8000-00000000000a","bidirectional":true,"weight_ms":561,"enabled":true},
+    {"from":"50000000-0000-4000-8000-00000000000a","to":"50000000-0000-4000-8000-00000000000c","bidirectional":true,"weight_ms":788,"enabled":true},
+    {"from":"50000000-0000-4000-8000-00000000000c","to":"50000000-0000-4000-8000-00000000000e","bidirectional":true,"weight_ms":455,"enabled":true},
+    {"from":"50000000-0000-4000-8000-00000000000e","to":"50000000-0000-4000-8000-000000000010","bidirectional":true,"weight_ms":949,"enabled":true}
+  ]
+}

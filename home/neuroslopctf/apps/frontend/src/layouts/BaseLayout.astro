@@ -1,0 +1,54 @@
+---
+import '../styles/global.css';
+import Disclaimer from '../components/Disclaimer.astro';
+
+interface Props {
+  title: string;
+  description?: string;
+}
+
+const {
+  title,
+  description = 'NeuroslopCTF — создавайте задания, отправляйте флаги и получайте токены. Все действия сопровождаются пояснениями.',
+} = Astro.props;
+---
+
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content={description} />
+    <meta name="theme-color" content="#08111a" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>{title}</title>
+  </head>
+  <body>
+    <a class="skip-link" href="#main-content">К содержанию</a>
+    <noscript><p class="status-message container">Для форм, каталога и профиля нужен JavaScript. Включите его в браузере, чтобы пользоваться сервисом.</p></noscript>
+    <slot />
+    <Disclaimer />
+
+    <script is:inline>
+      document.documentElement.classList.add('js-aos');
+
+      if ('IntersectionObserver' in window) {
+        const observer = new IntersectionObserver(
+          (entries) => {
+            for (const entry of entries) {
+              if (entry.isIntersecting) {
+                entry.target.classList.add('aos-animate');
+                observer.unobserve(entry.target);
+              }
+            }
+          },
+          { threshold: 0.12, rootMargin: '0px 0px -4% 0px' },
+        );
+
+        document.querySelectorAll('[data-aos]').forEach((node) => observer.observe(node));
+      } else {
+        document.querySelectorAll('[data-aos]').forEach((node) => node.classList.add('aos-animate'));
+      }
+    </script>
+  </body>
+</html>

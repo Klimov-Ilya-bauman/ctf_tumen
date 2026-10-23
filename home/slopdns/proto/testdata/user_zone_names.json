@@ -1,0 +1,191 @@
+{
+  "cases": [
+    {
+      "input": "foo.slop",
+      "valid": true,
+      "canonical": "foo.slop.",
+      "note": "simple subdomain"
+    },
+    {
+      "input": "foo.slop.",
+      "valid": true,
+      "canonical": "foo.slop.",
+      "note": "trailing dot accepted"
+    },
+    {
+      "input": "FOO.Slop",
+      "valid": true,
+      "canonical": "foo.slop.",
+      "note": "case folded to lower case"
+    },
+    {
+      "input": "a.b.slop",
+      "valid": true,
+      "canonical": "a.b.slop.",
+      "note": "deeper subdomain"
+    },
+    {
+      "input": "my-zone.slop",
+      "valid": true,
+      "canonical": "my-zone.slop.",
+      "note": "inner hyphen"
+    },
+    {
+      "input": "a1.slop",
+      "valid": true,
+      "canonical": "a1.slop.",
+      "note": "digits allowed"
+    },
+    {
+      "input": "1a.slop",
+      "valid": true,
+      "canonical": "1a.slop.",
+      "note": "leading digit allowed (RFC 1123)"
+    },
+    {
+      "input": "xn--e1afmkfd.slop",
+      "valid": true,
+      "canonical": "xn--e1afmkfd.slop.",
+      "note": "punycode label"
+    },
+    {
+      "input": "пример.slop",
+      "valid": true,
+      "canonical": "xn--e1afmkfd.slop.",
+      "note": "IDN converted to punycode"
+    },
+    {
+      "input": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.slop",
+      "valid": true,
+      "canonical": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.slop.",
+      "note": "63-octet label"
+    },
+    {
+      "input": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc.dddddddddddddddddddddddddddddddddddddddddddddddddddddddd.slop",
+      "valid": true,
+      "canonical": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc.dddddddddddddddddddddddddddddddddddddddddddddddddddddddd.slop.",
+      "note": "253-octet name (maximum)"
+    },
+    {
+      "input": "slop",
+      "valid": false,
+      "error_code": "validation_failed",
+      "reason": "outside_user_zone_suffix",
+      "note": "the suffix itself is not allowed"
+    },
+    {
+      "input": "slop.",
+      "valid": false,
+      "error_code": "validation_failed",
+      "reason": "outside_user_zone_suffix",
+      "note": "the suffix itself is not allowed"
+    },
+    {
+      "input": "example.com",
+      "valid": false,
+      "error_code": "validation_failed",
+      "reason": "outside_user_zone_suffix",
+      "note": "outside the user zone suffix"
+    },
+    {
+      "input": "fooslop",
+      "valid": false,
+      "error_code": "validation_failed",
+      "reason": "outside_user_zone_suffix",
+      "note": "not a subdomain of slop"
+    },
+    {
+      "input": "foo.slop.com",
+      "valid": false,
+      "error_code": "validation_failed",
+      "reason": "outside_user_zone_suffix",
+      "note": "outside the user zone suffix"
+    },
+    {
+      "input": ".",
+      "valid": false,
+      "error_code": "validation_failed",
+      "reason": "root_not_allowed",
+      "note": "root zone"
+    },
+    {
+      "input": "",
+      "valid": false,
+      "error_code": "validation_failed",
+      "reason": "empty",
+      "note": "empty"
+    },
+    {
+      "input": "-foo.slop",
+      "valid": false,
+      "error_code": "validation_failed",
+      "reason": "invalid_label",
+      "note": "leading hyphen"
+    },
+    {
+      "input": "foo-.slop",
+      "valid": false,
+      "error_code": "validation_failed",
+      "reason": "invalid_label",
+      "note": "trailing hyphen"
+    },
+    {
+      "input": "foo..slop",
+      "valid": false,
+      "error_code": "validation_failed",
+      "reason": "empty_label",
+      "note": "empty label"
+    },
+    {
+      "input": ".foo.slop",
+      "valid": false,
+      "error_code": "validation_failed",
+      "reason": "empty_label",
+      "note": "empty leading label"
+    },
+    {
+      "input": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.slop",
+      "valid": false,
+      "error_code": "validation_failed",
+      "reason": "label_too_long",
+      "note": "64-octet label"
+    },
+    {
+      "input": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc.ddddddddddddddddddddddddddddddddddddddddddddddddddddddddd.slop",
+      "valid": false,
+      "error_code": "validation_failed",
+      "reason": "name_too_long",
+      "note": "254-octet name"
+    },
+    {
+      "input": "foo_bar.slop",
+      "valid": false,
+      "error_code": "validation_failed",
+      "reason": "invalid_label",
+      "note": "underscore is not allowed in zone names"
+    },
+    {
+      "input": "*.slop",
+      "valid": false,
+      "error_code": "validation_failed",
+      "reason": "invalid_label",
+      "note": "wildcard is not allowed in zone names"
+    },
+    {
+      "input": "foo bar.slop",
+      "valid": false,
+      "error_code": "validation_failed",
+      "reason": "invalid_characters",
+      "note": "whitespace"
+    },
+    {
+      "input": "foo.slop..",
+      "valid": false,
+      "error_code": "validation_failed",
+      "reason": "empty_label",
+      "note": "double trailing dot"
+    }
+  ],
+  "description": "Zone names a user may create through the public API (USER_ZONE_SUFFIX). The DNS server and the sync protocol accept any valid name; this restriction applies only to the web/API layer. Invalid inputs are rejected with HTTP 422, error.code=validation_failed, error.field=name. 'reason' is informative.",
+  "user_zone_suffix": "slop"
+}

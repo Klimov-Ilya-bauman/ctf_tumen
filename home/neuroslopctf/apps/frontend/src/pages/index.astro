@@ -1,0 +1,159 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import Header from '../components/Header.astro';
+import Footer from '../components/Footer.astro';
+import LeaderboardPanel from '../components/LeaderboardPanel.astro';
+import InterfaceCaption from '../components/InterfaceCaption.astro';
+import { difficultyCards, faq, howItWorks } from '../data/site';
+---
+
+<BaseLayout title="NeuroslopCTF">
+  <div class="container">
+    <Header current="home" />
+
+    <main id="main-content">
+      <section class="hero">
+        <div class="hero-main">
+          <div class="hero-kicker" data-aos="fade-up">
+            <span class="blink-dot" aria-hidden="true"></span>
+            Платформа для соревнований CTF
+          </div>
+          <h1 class="hero-title" data-aos="fade-up">
+            Ваши задания. Ваши решения.
+            <br><br> <span class="gradient-text">Мы не успели сделать таски. Делайте сами.</span>
+          </h1>
+          <p class="lead" data-aos="fade-up">
+            Выберите соревнование, откройте задание и отправьте найденный флаг. Организаторы создают соревнования и управляют заданиями.
+          </p>
+          <div class="hero-actions" data-aos="fade-up">
+            <a class="btn-primary" href="/competitions">Просмотреть соревнования</a>
+            <a class="btn-secondary" href="/competitions/new">Создать соревнование</a>
+          </div>
+
+          <InterfaceCaption page="home" />
+          <div class="eyebrow" style="margin-top: 28px;">Статистика платформы</div>
+          <div class="stat-grid" data-platform-stats data-aos="fade-up" aria-label="Статистика платформы">
+            <div class="stat-card">
+              <span class="micro-label">Количество участников</span><div class="stat-value" data-stat="users">—</div>
+              <div class="stat-label">Зарегистрированные участники</div>
+            </div>
+            <div class="stat-card">
+              <span class="micro-label">Количество заданий</span><div class="stat-value" data-stat="tasks">—</div>
+              <div class="stat-label">Общее количество заданий</div>
+            </div>
+            <div class="stat-card">
+              <span class="micro-label">Текущее количество активных</span><div class="stat-value" data-stat="running_competitions">—</div>
+              <div class="stat-label">Активные соревнования</div>
+            </div>
+            <div class="stat-card">
+              <span class="micro-label">Общее число успешных решений</span><div class="stat-value" data-stat="solves">—</div>
+              <div class="stat-label">Успешные решения</div>
+            </div>
+          </div>
+        </div>
+
+        <aside class="hero-side" aria-label="Лидеры таблицы">
+          <LeaderboardPanel limit={5} />
+        </aside>
+      </section>
+
+      <div class="section-stack">
+        <section aria-labelledby="running-title">
+          <div class="section-head"><div><div class="eyebrow">Соревнования</div><h2 class="section-title" id="running-title">Текущие соревнования</h2></div><a class="btn-ghost btn-small" href="/competitions">Все соревнования →</a></div>
+          <div class="task-grid" data-running-competitions aria-busy="true"><p class="status-message" role="status">Загружаем соревнования…</p></div>
+        </section>
+        <section class="section-card card" aria-labelledby="how-title" data-aos="fade-up">
+          <div class="section-head">
+            <div>
+              <div class="eyebrow">Начало работы</div>
+              <h2 class="section-title" id="how-title">Как начать пользоваться платформой</h2>
+            </div>
+            <span class="pill-inline">Пошагово · 3 шага</span>
+          </div>
+          <div class="feature-grid">
+            {howItWorks.map((item, index) => (
+              <article class="feature-card">
+                <div class="feature-number">{index + 1}</div>
+                <h3>{item.title}</h3>
+                <p>{item.text}</p>
+              </article>
+            ))}
+          </div>
+        </section>
+
+        <section class="section-card grid-shell" aria-labelledby="difficulty-title" data-aos="fade-up">
+          <div class="section-head">
+            <div>
+              <div class="eyebrow">Обзор категорий CTF</div>
+              <h2 class="section-title" id="difficulty-title">Выберите категорию заданий</h2>
+            </div>
+            <span class="pill-inline">3 категории:</span>
+          </div>
+          <div class="difficulty-grid">
+            {difficultyCards.map((item) => (
+              <article class={`difficulty-card ${item.key}`}>
+                <span class={`difficulty ${item.key}`}>{item.score}</span>
+                <h3 style="margin-top: 16px;">{item.title}</h3>
+                <p>{item.text}</p>
+              </article>
+            ))}
+          </div>
+        </section>
+
+        <section class="section-card card" id="faq" aria-labelledby="faq-title" data-aos="fade-up">
+          <div class="section-head">
+            <div>
+              <div class="eyebrow">Вопросы и ответы</div>
+              <h2 class="section-title" id="faq-title">Частые вопросы</h2>
+            </div>
+          </div>
+          <div class="feature-grid">
+            {faq.map((item) => (
+              <article class="feature-card">
+                <h3>{item.q}</h3>
+                <p>{item.a}</p>
+              </article>
+            ))}
+          </div>
+        </section>
+
+        <section class="section-card grid-shell" data-aos="fade-up">
+          <div class="section-head">
+            <div>
+              <div class="eyebrow">Можно начинать</div>
+              <h2 class="section-title">Начните с выбора соревнования</h2>
+              <p class="section-copy">Нажмите «К соревнованиям», чтобы открыть каталог. Для участия войдите в аккаунт или зарегистрируйтесь.</p>
+            </div>
+            <div class="inline-actions stretch-mobile">
+              <a class="btn-primary" href="/competitions">К соревнованиям</a>
+              <a class="btn-secondary" href="/register">Зарегистрироваться</a>
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <Footer />
+
+  <script>
+    import {stats, listCompetitions} from '../lib/endpoints';
+    import {competitionCard, region} from '../lib/ui/common';
+    import {empty} from '../lib/dom';
+    const root = document.querySelector<HTMLElement>('[data-platform-stats]');
+    if (root) {
+      stats().then(data => {
+        for (const [key,value] of Object.entries(data)) {
+          const target=root.querySelector<HTMLElement>(`[data-stat="${key}"]`);
+          if(target) target.textContent=value.toLocaleString('ru-RU');
+        }
+      }).catch(() => root.querySelectorAll('[data-stat]').forEach(node => node.textContent='—'));
+    }
+    const competitions=document.querySelector<HTMLElement>('[data-running-competitions]')!;
+    void region(competitions,async()=>{
+      const result=await listCompetitions({state:'running',limit:6});
+      const items=result.items.filter(c=>c.visibility==='public');
+      competitions.replaceChildren(...(items.length?items.map(c=>competitionCard(c)):[empty()]));
+    });
+  </script>
+</BaseLayout>

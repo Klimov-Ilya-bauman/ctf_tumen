@@ -1,0 +1,33 @@
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: neuroslopctf
+      POSTGRES_PASSWORD: neuroslopctf
+      POSTGRES_DB: neuroslopctf
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U neuroslopctf -d neuroslopctf"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  server:
+    build: .
+    environment:
+      DATABASE_URL: postgres://neuroslopctf:neuroslopctf@db:5432/neuroslopctf
+      PORT: 3000
+      DATA_DIR: /data
+    volumes:
+      - server-data:/data
+    ports:
+      - "${SERVER_PORT:-9090}:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  db-data:
+  server-data:

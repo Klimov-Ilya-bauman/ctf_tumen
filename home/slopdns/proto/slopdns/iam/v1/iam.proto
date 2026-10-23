@@ -1,0 +1,245 @@
+syntax = "proto3";
+
+package slopdns.iam.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "slopdns/web/gen/slopdns/iam/v1;iamv1";
+
+service IamService {
+  rpc Introspect(IntrospectRequest) returns (IntrospectResponse);
+  rpc Check(CheckRequest) returns (CheckResponse);
+  rpc ListAccessible(ListAccessibleRequest) returns (ListAccessibleResponse);
+  rpc Grant(GrantRequest) returns (GrantResponse);
+  rpc Revoke(RevokeRequest) returns (RevokeResponse);
+  rpc RevokeResource(RevokeResourceRequest) returns (RevokeResourceResponse);
+  rpc ListBindings(ListBindingsRequest) returns (ListBindingsResponse);
+  rpc TransferOwnership(TransferOwnershipRequest) returns (TransferOwnershipResponse);
+  rpc CreateOrgOwner(CreateOrgOwnerRequest) returns (CreateOrgOwnerResponse);
+  rpc LookupUsers(LookupUsersRequest) returns (LookupUsersResponse);
+  rpc ListBindingResources(ListBindingResourcesRequest) returns (ListBindingResourcesResponse);
+  rpc ListServiceAccountRefs(ListServiceAccountRefsRequest) returns (ListServiceAccountRefsResponse);
+}
+
+enum PrincipalType {
+  PRINCIPAL_TYPE_UNSPECIFIED = 0;
+  PRINCIPAL_TYPE_USER = 1;
+  PRINCIPAL_TYPE_SERVICE_ACCOUNT = 2;
+}
+
+enum ResourceType {
+  RESOURCE_TYPE_UNSPECIFIED = 0;
+  RESOURCE_TYPE_ORG = 1;
+  RESOURCE_TYPE_ZONE = 2;
+  RESOURCE_TYPE_SERVICE_ACCOUNT = 3;
+}
+
+enum Role {
+  ROLE_UNSPECIFIED = 0;
+  ROLE_READER = 1;
+  ROLE_EDITOR = 2;
+  ROLE_ADMIN = 3;
+  ROLE_OWNER = 4;
+}
+
+enum Action {
+  ACTION_UNSPECIFIED = 0;
+  ACTION_READ = 1;
+  ACTION_WRITE = 2;
+  ACTION_MANAGE_ACCESS = 3;
+  ACTION_OWN = 4;
+}
+
+enum TokenKind {
+  TOKEN_KIND_UNSPECIFIED = 0;
+  TOKEN_KIND_SESSION = 1;
+  TOKEN_KIND_USER_API_TOKEN = 2;
+  TOKEN_KIND_SERVICE_ACCOUNT_TOKEN = 3;
+}
+
+message Principal {
+  PrincipalType type = 1;
+  string id = 2;
+}
+
+message ResourceRef {
+  ResourceType type = 1;
+  string id = 2;
+  string org_id = 3;
+}
+
+message RoleBinding {
+  string id = 1;
+  Principal principal = 2;
+  string principal_name = 3;
+  ResourceRef resource = 4;
+  Role role = 5;
+  string granted_by_user_id = 6;
+  google.protobuf.Timestamp created_at = 7;
+}
+
+message User {
+  string id = 1;
+  string username = 2;
+}
+
+message IntrospectRequest {
+  string token = 1;
+}
+
+message IntrospectResponse {
+  bool active = 1;
+  Principal principal = 2;
+  string principal_name = 3;
+  string org_id = 4;
+  TokenKind token_kind = 5;
+  string assertion = 6;
+  google.protobuf.Timestamp assertion_expires_at = 7;
+  int64 authz_version = 8;
+}
+
+message CheckRequest {
+  Principal principal = 1;
+  Action action = 2;
+  ResourceRef resource = 3;
+}
+
+message CheckResponse {
+  bool allowed = 1;
+  Role effective_role = 2;
+}
+
+message ListAccessibleRequest {
+  Principal principal = 1;
+  ResourceType resource_type = 2;
+}
+
+message OrgRole {
+  string org_id = 1;
+  Role role = 2;
+}
+
+message ResourceRole {
+  string resource_id = 1;
+  string org_id = 2;
+  Role role = 3;
+}
+
+message ListAccessibleResponse {
+  repeated OrgRole org_roles = 1;
+  repeated ResourceRole resource_roles = 2;
+  repeated string member_org_ids = 3;
+}
+
+message GrantRequest {
+  Principal principal = 1;
+  ResourceRef resource = 2;
+  Role role = 3;
+  string granted_by_user_id = 4;
+  bool replace_existing = 5;
+}
+
+message GrantResponse {
+  RoleBinding binding = 1;
+  bool created = 2;
+}
+
+message PrincipalInOrg {
+  Principal principal = 1;
+  string org_id = 2;
+}
+
+message RevokeRequest {
+  oneof target {
+    string binding_id = 1;
+    PrincipalInOrg principal_in_org = 2;
+  }
+}
+
+message RevokeResponse {
+  uint32 revoked_count = 1;
+}
+
+message RevokeResourceRequest {
+  ResourceRef resource = 1;
+}
+
+message RevokeResourceResponse {
+  uint32 revoked_count = 1;
+}
+
+message ListBindingsRequest {
+  oneof filter {
+    ResourceRef resource = 1;
+    string org_id = 2;
+    Principal principal = 3;
+  }
+}
+
+message ListBindingsResponse {
+  repeated RoleBinding bindings = 1;
+  int64 authz_version = 2;
+}
+
+message TransferOwnershipRequest {
+  string org_id = 1;
+  string from_user_id = 2;
+  string to_user_id = 3;
+}
+
+message TransferOwnershipResponse {
+  RoleBinding new_owner_binding = 1;
+  RoleBinding previous_owner_binding = 2;
+}
+
+message CreateOrgOwnerRequest {
+  string org_id = 1;
+  string user_id = 2;
+}
+
+message CreateOrgOwnerResponse {
+  RoleBinding binding = 1;
+  bool created = 2;
+}
+
+message LookupUsersRequest {
+  repeated string user_ids = 1;
+  repeated string usernames = 2;
+}
+
+message LookupUsersResponse {
+  repeated User users = 1;
+}
+
+message ListBindingResourcesRequest {
+  ResourceType resource_type = 1;
+  uint32 page_size = 2;
+  string page_token = 3;
+}
+
+message BindingResource {
+  ResourceRef resource = 1;
+  uint32 binding_count = 2;
+  google.protobuf.Timestamp latest_created_at = 3;
+}
+
+message ListBindingResourcesResponse {
+  repeated BindingResource resources = 1;
+  string next_page_token = 2;
+}
+
+message ListServiceAccountRefsRequest {
+  uint32 page_size = 1;
+  string page_token = 2;
+}
+
+message ServiceAccountRef {
+  string id = 1;
+  string org_id = 2;
+  google.protobuf.Timestamp created_at = 3;
+}
+
+message ListServiceAccountRefsResponse {
+  repeated ServiceAccountRef service_accounts = 1;
+  string next_page_token = 2;
+}

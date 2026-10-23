@@ -1,0 +1,9 @@
+**
+!buf.yaml
+!buf.gen.yaml
+!proto/**
+!web/**
+web/gen
+web/frontend/ui
+**/node_modules
+**/.DS_Store

@@ -1,0 +1,58 @@
+---
+import { disclaimer } from '../data/disclaimer';
+---
+
+<dialog class="disclaimer" data-disclaimer data-version={disclaimer.version} aria-labelledby="disclaimer-title" aria-describedby="disclaimer-text">
+  <h2 id="disclaimer-title">{disclaimer.title}</h2>
+  <div id="disclaimer-text" class="disclaimer-text">
+    {disclaimer.paragraphs.map(paragraph => <p>{paragraph}</p>)}
+  </div>
+  <button type="button" class="btn btn-primary" data-disclaimer-accept autofocus>{disclaimer.buttonLabel}</button>
+</dialog>
+
+<script>
+  const dialog = document.querySelector<HTMLDialogElement>('[data-disclaimer]');
+  if (dialog) {
+    const storageKey = 'neuroslopctf-disclaimer-accepted';
+    const version = dialog.dataset.version!;
+    let accepted = false;
+    try {
+      accepted = localStorage.getItem(storageKey) === version;
+    } catch {
+    }
+
+    dialog.addEventListener('cancel', event => event.preventDefault());
+    dialog.querySelector<HTMLButtonElement>('[data-disclaimer-accept]')!.addEventListener('click', () => {
+      try {
+        localStorage.setItem(storageKey, version);
+      } catch {
+      }
+      dialog.close();
+    });
+
+    if (!accepted) dialog.showModal();
+  }
+</script>
+
+<style>
+  .disclaimer {
+    width: min(1000px, calc(100% - 32px));
+    max-height: calc(100dvh - 32px);
+    margin: auto;
+    padding: clamp(20px, 5vw, 32px);
+    overflow-y: auto;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-lg);
+    background: var(--bg);
+    color: var(--text);
+    box-shadow: var(--shadow);
+  }
+  .disclaimer::backdrop {
+    background: rgba(0, 0, 0, 0.75);
+    backdrop-filter: blur(6px);
+  }
+  .disclaimer h2 { margin: 0 0 20px; }
+  .disclaimer-text { color: var(--text-soft); overflow-wrap: anywhere; }
+  .disclaimer-text p { margin: 0 0 16px; white-space: pre-line; }
+  .disclaimer button { width: 100%; margin-top: 8px; }
+</style>

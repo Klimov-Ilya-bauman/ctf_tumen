@@ -1,0 +1,124 @@
+syntax = "proto3";
+
+package slopdns.sync.v1;
+
+option go_package = "slopdns/web/gen/slopdns/sync/v1;syncv1";
+
+service DnsSyncService {
+  rpc Stream(stream ClientFrame) returns (stream ServerFrame);
+}
+
+enum FrameKind {
+  FRAME_KIND_UNSPECIFIED = 0;
+  FRAME_KIND_HELLO = 1;
+  FRAME_KIND_ACK = 2;
+  FRAME_KIND_WELCOME = 3;
+  FRAME_KIND_SNAPSHOT_BEGIN = 4;
+  FRAME_KIND_SNAPSHOT_CHUNK = 5;
+  FRAME_KIND_SNAPSHOT_END = 6;
+  FRAME_KIND_DELTA = 7;
+  FRAME_KIND_HEARTBEAT = 8;
+}
+
+message Signed {
+  bytes payload = 1;
+  bytes signature = 2;
+}
+
+message ClientFrame {
+  oneof kind {
+    Signed hello = 1;
+    Signed ack = 2;
+  }
+}
+
+message ServerFrame {
+  oneof kind {
+    Signed welcome = 1;
+    Signed snapshot_begin = 2;
+    Signed snapshot_chunk = 3;
+    Signed snapshot_end = 4;
+    Signed delta = 5;
+    Signed heartbeat = 6;
+  }
+}
+
+message Hello {
+  string node_id = 1;
+  uint64 last_revision = 2;
+  bytes nonce = 3;
+  uint32 proto_version = 4;
+}
+
+message Welcome {
+  bytes session_id = 1;
+  bytes client_nonce = 2;
+  uint64 current_revision = 3;
+  bool full_resync = 4;
+  uint32 heartbeat_interval_ms = 5;
+  uint32 proto_version = 6;
+}
+
+message SnapshotBegin {
+  uint64 revision = 1;
+  uint32 zone_count = 2;
+}
+
+message SnapshotChunk {
+  uint64 revision = 1;
+  repeated Zone zones = 2;
+}
+
+message SnapshotEnd {
+  uint64 revision = 1;
+  bytes digest = 2;
+}
+
+message Delta {
+  uint64 prev_revision = 1;
+  uint64 revision = 2;
+  repeated Op ops = 3;
+}
+
+message Heartbeat {
+  uint64 current_revision = 1;
+  int64 unix_ms = 2;
+}
+
+message Ack {
+  uint64 revision = 1;
+}
+
+message Zone {
+  string apex = 1;
+  repeated RRSet rrsets = 2;
+}
+
+message RRSet {
+  string owner = 1;
+  uint32 type = 2;
+  uint32 rr_class = 3;
+  uint32 ttl = 4;
+  repeated bytes rdata = 5;
+}
+
+message ZoneRRSet {
+  string apex = 1;
+  RRSet rrset = 2;
+}
+
+message RRSetKey {
+  string apex = 1;
+  string owner = 2;
+  uint32 type = 3;
+  uint32 rr_class = 4;
+}
+
+message Op {
+  oneof op {
+    Zone put_zone = 1;
+    string delete_zone = 2;
+    ZoneRRSet put_rrset = 3;
+    RRSetKey delete_rrset = 4;
+  }
+}

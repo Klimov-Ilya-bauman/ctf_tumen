@@ -1,0 +1,33 @@
+---
+interface Props {current?:string}
+const {current=''}=Astro.props;
+const active=(section:string)=>current===section || section==='competitions'&&current==='competition-new';
+---
+<header class="site-header grid-shell">
+ <a class="brand" href="/"><span class="brand-sigil" aria-hidden="true">Н</span><span class="brand-copy"><span class="eyebrow">Официальная платформа соревнований NeuroslopCTF</span><span class="brand-title">NeuroslopCTF</span></span></a>
+ <nav class="nav" aria-label="Основная навигация">
+  <a href="/" class={active('home')?'is-active':undefined} aria-current={active('home')?'page':undefined}>Главная<small>Перейти на главную</small></a>
+  <a href="/competitions" class={active('competitions')?'is-active':undefined} aria-current={active('competitions')?'page':undefined}>Соревнования<small>Просмотреть соревнования</small></a>
+  <a href="/profile" class={active('profile')?'is-active':undefined} aria-current={active('profile')?'page':undefined}>Профиль<small>Открыть свой профиль</small></a>
+  <a href="/#faq">Вопросы<small>Прочитать ответы</small></a>
+ </nav>
+ <div class="header-session" data-site-header aria-live="polite">
+  <span class="session-loading" data-auth-loading>Проверяем вход…</span>
+  <div class="header-actions" data-auth-guest hidden><a href="/login" class="btn-ghost btn-small">Войти</a><a href="/register" class="btn-primary btn-small">Регистрация</a></div>
+  <div class="header-actions" data-auth-user hidden><a href="/profile" class="user-chip"><span class="status-dot" aria-hidden="true"></span><span data-auth-username></span></a><a href="/competitions/new" class="btn-primary btn-small">+ Создать соревнование</a><button type="button" class="btn-ghost btn-small" data-auth-logout>Выйти</button></div>
+ </div>
+</header>
+<script>
+ import {getCurrentUser,errorMessage} from '../lib/api';
+ import {logout} from '../lib/endpoints';
+ const root=document.querySelector<HTMLElement>('[data-site-header]')!;
+ const loading=root.querySelector<HTMLElement>('[data-auth-loading]')!;
+ void getCurrentUser().then(user=>{
+  loading.hidden=true;root.querySelector<HTMLElement>(user?'[data-auth-user]':'[data-auth-guest]')!.hidden=false;
+  if(user)root.querySelector<HTMLElement>('[data-auth-username]')!.textContent=user.username;
+ }).catch(e=>{loading.textContent=errorMessage(e);root.querySelector<HTMLElement>('[data-auth-guest]')!.hidden=false;});
+ root.querySelector<HTMLButtonElement>('[data-auth-logout]')!.addEventListener('click',async e=>{
+  const b=e.currentTarget as HTMLButtonElement;b.disabled=true;
+  try{await logout();location.assign('/');}catch(error){loading.hidden=false;loading.textContent=errorMessage(error);b.disabled=false;}
+ });
+</script>

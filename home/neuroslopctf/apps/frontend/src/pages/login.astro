@@ -1,0 +1,200 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import Header from '../components/Header.astro';
+import Footer from '../components/Footer.astro';
+import InterfaceCaption from '../components/InterfaceCaption.astro';
+---
+
+<BaseLayout
+  title="Вход · NeuroslopCTF"
+  description="Вход в учётную запись NeuroslopCTF."
+>
+  <div class="container">
+    <Header current="auth" />
+
+    <main id="main-content" class="page-shell">
+      <div class="auth-layout">
+        <section class="form-card card" data-aos="fade-up" aria-labelledby="login-title">
+          <div class="eyebrow">Вход в аккаунт</div>
+          <h1 id="login-title" class="auth-title">Войти в NeuroslopCTF</h1>
+          <InterfaceCaption page="login" />
+          <p class="auth-copy">
+            Введите имя пользователя и пароль от вашего аккаунта.
+          </p>
+
+          <form class="form-grid" data-login-form>
+            <div class="form-field">
+              <label class="field-label" for="login-username">Имя пользователя</label>
+              <input
+                class="text-input"
+                id="login-username"
+                name="username"
+                type="text"
+                autocomplete="username"
+                minlength="3"
+                maxlength="40"
+                required
+                autofocus
+                aria-describedby="login-username-hint"
+                placeholder="например, участник_платформы"
+              />
+              <p id="login-username-hint" class="field-hint">
+                Введите имя, которое вы указали при регистрации.
+              </p>
+            </div>
+
+            <div class="form-field">
+              <label class="field-label" for="login-password">Пароль</label>
+              <input
+                class="text-input"
+                id="login-password"
+                name="password"
+                type="password"
+                autocomplete="current-password"
+                minlength="6"
+                maxlength="200"
+                required
+                aria-describedby="login-password-hint"
+                placeholder="не менее шести символов"
+              />
+              <p id="login-password-hint" class="field-hint">
+                Введите пароль от аккаунта. Регистр имеет значение.
+              </p>
+            </div>
+
+            <p
+              class="status-message error"
+              data-form-status
+              role="alert"
+              aria-live="assertive"
+              aria-atomic="true"
+              hidden
+            ></p>
+
+            <button class="btn-primary btn-wide" type="submit" data-submit>
+              Войти в аккаунт
+            </button>
+            <p class="field-hint">Нажмите «Войти в аккаунт», чтобы отправить имя и пароль.</p>
+          </form>
+
+          <p class="auth-switch">
+            Ещё нет аккаунта для входа?
+            <a href="/register" data-auth-switch>Создать аккаунт для будущего входа</a>
+          </p>
+        </section>
+
+        <aside class="auth-side grid-shell" data-aos="fade-up" data-aos-delay="90" aria-labelledby="login-side-title">
+          <div class="eyebrow">Обзор возможностей после входа</div>
+          <h2 id="login-side-title" class="panel-title">После входа</h2>
+          <ul class="auth-list">
+            <li><span aria-hidden="true">1</span><div>Открывайте задания выбранного соревнования.</div></li>
+            <li><span aria-hidden="true">2</span><div>Отправляйте флаги в соревнованиях, в которых участвуете.</div></li>
+            <li><span aria-hidden="true">3</span><div>Просматривайте полученные токены в профиле.</div></li>
+          </ul>
+          <p class="side-note">Если аккаунт уже создан, повторная регистрация не требуется.</p>
+        </aside>
+      </div>
+    </main>
+  </div>
+
+  <Footer />
+
+  <script>
+    import { errorMessage, safeNextPath } from '../lib/api';
+
+    import {login} from '../lib/endpoints';
+    const form = document.querySelector<HTMLFormElement>('[data-login-form]');
+    const status = form?.querySelector<HTMLElement>('[data-form-status]');
+    const submit = form?.querySelector<HTMLButtonElement>('[data-submit]');
+    const switchLink = document.querySelector<HTMLAnchorElement>('[data-auth-switch]');
+    const nextPath = safeNextPath('');
+
+    if (switchLink && nextPath) {
+      switchLink.href = `/register?next=${encodeURIComponent(nextPath)}`;
+    }
+
+    const showStatus = (message: string, kind: 'error' | 'success') => {
+      if (!status) return;
+      status.textContent = message;
+      status.classList.remove('error', 'success');
+      status.classList.add(kind);
+      status.setAttribute('role', kind === 'error' ? 'alert' : 'status');
+      status.setAttribute('aria-live', kind === 'error' ? 'assertive' : 'polite');
+      status.removeAttribute('hidden');
+    };
+
+    form?.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      if (!form.reportValidity()) return;
+
+      const username = form.querySelector<HTMLInputElement>('[name="username"]');
+      const password = form.querySelector<HTMLInputElement>('[name="password"]');
+      if (!username || !password) return;
+
+      status?.setAttribute('hidden', '');
+      form.setAttribute('aria-busy', 'true');
+      if (submit) {
+        submit.disabled = true;
+        submit.textContent = 'Выполняем вход…';
+      }
+
+      try {
+        await login({username: username.value.trim(),password: password.value});
+        showStatus('Вход выполнен. Сессия активна. Открываем соревнования…', 'success');
+        window.location.replace(safeNextPath('/competitions'));
+      } catch (error) {
+        showStatus(errorMessage(error), 'error');
+        password.focus();
+        password.select();
+        form.removeAttribute('aria-busy');
+        if (submit) {
+          submit.disabled = false;
+          submit.textContent = 'Войти в аккаунт';
+        }
+      }
+    });
+  </script>
+
+  <style>
+    .auth-title {
+      margin: 10px 0 0;
+      font-size: clamp(34px, 5vw, 58px);
+      font-weight: 950;
+      letter-spacing: -0.05em;
+      line-height: 1;
+    }
+
+    .auth-copy,
+    .side-note {
+      color: var(--text-soft);
+      line-height: 1.65;
+    }
+
+    .auth-copy {
+      max-width: 660px;
+      margin: 18px 0 0;
+    }
+
+    .auth-switch {
+      margin: 22px 0 0;
+      color: var(--text-muted);
+      text-align: center;
+    }
+
+    .auth-switch a {
+      color: var(--brand-soft);
+      font-weight: 800;
+    }
+
+    .side-note {
+      margin: 24px 0 0;
+      padding-top: 20px;
+      border-top: 1px solid var(--border);
+      font-size: 14px;
+    }
+
+    .status-message {
+      margin: 0;
+    }
+  </style>
+</BaseLayout>

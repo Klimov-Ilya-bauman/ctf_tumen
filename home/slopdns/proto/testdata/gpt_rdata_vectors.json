@@ -1,0 +1,89 @@
+{
+  "cases": [
+    {
+      "text": "",
+      "text_utf8_bytes": 0,
+      "valid": true,
+      "rdata_hex": "00",
+      "rfc3597_presentation": "\\# 1 00",
+      "note": "empty text is allowed"
+    },
+    {
+      "text": "hello",
+      "text_utf8_bytes": 5,
+      "valid": true,
+      "rdata_hex": "0568656c6c6f",
+      "rfc3597_presentation": "\\# 6 0568656C6C6F",
+      "note": "ASCII"
+    },
+    {
+      "text": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "text_utf8_bytes": 40,
+      "valid": true,
+      "rdata_hex": "2841414141414141414141414141414141414141414141414141414141414141414141414141414141",
+      "rfc3597_presentation": "\\# 41 2841414141414141414141414141414141414141414141414141414141414141414141414141414141",
+      "note": "40 bytes, the maximum"
+    },
+    {
+      "text": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "text_utf8_bytes": 41,
+      "valid": false,
+      "note": "41 bytes, too long"
+    },
+    {
+      "text": "Привет, мир",
+      "text_utf8_bytes": 20,
+      "valid": true,
+      "rdata_hex": "14d09fd180d0b8d0b2d0b5d1822c20d0bcd0b8d180",
+      "rfc3597_presentation": "\\# 21 14D09FD180D0B8D0B2D0B5D1822C20D0BCD0B8D180",
+      "note": "Cyrillic, 20 UTF-8 bytes"
+    },
+    {
+      "text": "яяяяяяяяяяяяяяяяяяяя",
+      "text_utf8_bytes": 40,
+      "valid": true,
+      "rdata_hex": "28d18fd18fd18fd18fd18fd18fd18fd18fd18fd18fd18fd18fd18fd18fd18fd18fd18fd18fd18fd18f",
+      "rfc3597_presentation": "\\# 41 28D18FD18FD18FD18FD18FD18FD18FD18FD18FD18FD18FD18FD18FD18FD18FD18FD18FD18FD18FD18F",
+      "note": "20 characters, 40 UTF-8 bytes"
+    },
+    {
+      "text": "яяяяяяяяяяяяяяяяяяяяя",
+      "text_utf8_bytes": 42,
+      "valid": false,
+      "note": "21 characters, 42 UTF-8 bytes, too long"
+    },
+    {
+      "text": "quote\" and \\ backslash",
+      "text_utf8_bytes": 22,
+      "valid": true,
+      "rdata_hex": "1671756f74652220616e64205c206261636b736c617368",
+      "rfc3597_presentation": "\\# 23 1671756F74652220616E64205C206261636B736C617368",
+      "note": "characters that need escaping in presentation format"
+    }
+  ],
+  "description": "GPT RDATA (ADR 0003): one \u003ccharacter-string\u003e, LEN 0..40, UTF-8 text. text_utf8_bytes counts bytes, not characters.",
+  "invalid_wire": [
+    {
+      "rdata_hex": "",
+      "reason": "RDLENGTH 0: the length octet is missing"
+    },
+    {
+      "rdata_hex": "05616263",
+      "reason": "LEN larger than the remaining RDATA"
+    },
+    {
+      "rdata_hex": "0361626364",
+      "reason": "RDLENGTH != LEN + 1"
+    },
+    {
+      "rdata_hex": "294141414141414141414141414141414141414141414141414141414141414141414141414141414141",
+      "reason": "LEN \u003e 40"
+    },
+    {
+      "rdata_hex": "02c328",
+      "reason": "invalid UTF-8 (rejected by the backend, served as-is by the DNS server)"
+    }
+  ],
+  "type_code": 65280,
+  "type_mnemonic": "GPT"
+}

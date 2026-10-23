@@ -1,0 +1,542 @@
+{
+  "context_ascii": "slopdns-sync-v1\\0",
+  "context_hex": "736c6f70646e732d73796e632d763100",
+  "description": "Ed25519 (RFC 8032, pure) signatures of sync frames, ADR 0002. signed_message = context || frame_kind (1 byte) || session_id (16 bytes) || payload. Hello and Welcome use the all-zero session id; every later frame uses Welcome.session_id. payload_hex is the exact protobuf bytes carried in Signed.payload; frame_hex is the serialized ClientFrame/ServerFrame. Private seeds are test-only.",
+  "frames": [
+    {
+      "name": "hello",
+      "direction": "client_to_server",
+      "frame_kind": "FRAME_KIND_HELLO",
+      "frame_kind_value": 1,
+      "message_type": "slopdns.sync.v1.Hello",
+      "message": {
+        "node_id": "dns1",
+        "nonce": "AQIDBAUGBwgJCgsMDQ4PEA==",
+        "proto_version": 1
+      },
+      "session_id_hex": "00000000000000000000000000000000",
+      "payload_hex": "0a04646e73311a100102030405060708090a0b0c0d0e0f102001",
+      "signed_message_hex": "736c6f70646e732d73796e632d76310001000000000000000000000000000000000a04646e73311a100102030405060708090a0b0c0d0e0f102001",
+      "signed_by": "dns-dns1",
+      "signature_hex": "d084d7eb477b82e284add3551270d8888730f72e138fb8ed8810998e6f16b59e0f75cec6321eddcd9d8cecb42f71df98dd93ca7a1dd5792dc75830d316dcde0b",
+      "frame_hex": "0a5e0a1a0a04646e73311a100102030405060708090a0b0c0d0e0f1020011240d084d7eb477b82e284add3551270d8888730f72e138fb8ed8810998e6f16b59e0f75cec6321eddcd9d8cecb42f71df98dd93ca7a1dd5792dc75830d316dcde0b"
+    },
+    {
+      "name": "welcome",
+      "direction": "server_to_client",
+      "frame_kind": "FRAME_KIND_WELCOME",
+      "frame_kind_value": 3,
+      "message_type": "slopdns.sync.v1.Welcome",
+      "message": {
+        "client_nonce": "AQIDBAUGBwgJCgsMDQ4PEA==",
+        "current_revision": "42",
+        "full_resync": true,
+        "heartbeat_interval_ms": 5000,
+        "proto_version": 1,
+        "session_id": "oKGio6SlpqeoqaqrrK2urw=="
+      },
+      "session_id_hex": "00000000000000000000000000000000",
+      "payload_hex": "0a10a0a1a2a3a4a5a6a7a8a9aaabacadaeaf12100102030405060708090a0b0c0d0e0f10182a20012888273001",
+      "signed_message_hex": "736c6f70646e732d73796e632d76310003000000000000000000000000000000000a10a0a1a2a3a4a5a6a7a8a9aaabacadaeaf12100102030405060708090a0b0c0d0e0f10182a20012888273001",
+      "signed_by": "backend-sync",
+      "signature_hex": "383d78526ecfe369579f2dbd55aae7b0cd92e0bf879465b5f2c96d359c6aa47a019823d9e8754f868229c29a6c9e0fd61bf7f5e6eb9aa3b6222e8ff570bab508",
+      "frame_hex": "0a710a2d0a10a0a1a2a3a4a5a6a7a8a9aaabacadaeaf12100102030405060708090a0b0c0d0e0f10182a200128882730011240383d78526ecfe369579f2dbd55aae7b0cd92e0bf879465b5f2c96d359c6aa47a019823d9e8754f868229c29a6c9e0fd61bf7f5e6eb9aa3b6222e8ff570bab508"
+    },
+    {
+      "name": "snapshot_begin",
+      "direction": "server_to_client",
+      "frame_kind": "FRAME_KIND_SNAPSHOT_BEGIN",
+      "frame_kind_value": 4,
+      "message_type": "slopdns.sync.v1.SnapshotBegin",
+      "message": {
+        "revision": "42",
+        "zone_count": 3
+      },
+      "session_id_hex": "a0a1a2a3a4a5a6a7a8a9aaabacadaeaf",
+      "payload_hex": "082a1003",
+      "signed_message_hex": "736c6f70646e732d73796e632d76310004a0a1a2a3a4a5a6a7a8a9aaabacadaeaf082a1003",
+      "signed_by": "backend-sync",
+      "signature_hex": "a2e55853ecd9431fec812646356dfe51f2840d79ca413478cf7213eae6c1a1be43391a5e36c74c2241f2649f06f93d9d339d2168f157cd7347ea73dc6ffc6109",
+      "frame_hex": "12480a04082a10031240a2e55853ecd9431fec812646356dfe51f2840d79ca413478cf7213eae6c1a1be43391a5e36c74c2241f2649f06f93d9d339d2168f157cd7347ea73dc6ffc6109"
+    },
+    {
+      "name": "snapshot_chunk_1",
+      "direction": "server_to_client",
+      "frame_kind": "FRAME_KIND_SNAPSHOT_CHUNK",
+      "frame_kind_value": 5,
+      "message_type": "slopdns.sync.v1.SnapshotChunk",
+      "message": {
+        "revision": "42",
+        "zones": [
+          {
+            "apex": "example.slop.",
+            "rrsets": [
+              {
+                "owner": "www.example.slop.",
+                "rdata": [
+                  "wAACFA==",
+                  "wAACCg=="
+                ],
+                "rr_class": 1,
+                "ttl": 300,
+                "type": 1
+              },
+              {
+                "owner": "example.slop.",
+                "rdata": [
+                  "A25zMQdzbG9wZG5zBHNsb3AACmhvc3RtYXN0ZXIHc2xvcGRucwRzbG9wAAAAAAcAAA4QAAADhAASdQAAAAEs"
+                ],
+                "rr_class": 1,
+                "ttl": 3600,
+                "type": 6
+              },
+              {
+                "owner": "example.slop.",
+                "rdata": [
+                  "A25zMgdzbG9wZG5zBHNsb3AA",
+                  "A25zMQdzbG9wZG5zBHNsb3AA"
+                ],
+                "rr_class": 1,
+                "ttl": 3600,
+                "type": 2
+              },
+              {
+                "owner": "example.slop.",
+                "rdata": [
+                  "ABQDbXgyB2V4YW1wbGUEc2xvcAA=",
+                  "AAoDbXgxB2V4YW1wbGUEc2xvcAA="
+                ],
+                "rr_class": 1,
+                "ttl": 3600,
+                "type": 15
+              },
+              {
+                "owner": "example.slop.",
+                "rdata": [
+                  "C3Y9c3BmMSAtYWxs",
+                  "BWhlbGxvBXdvcmxk"
+                ],
+                "rr_class": 1,
+                "ttl": 300,
+                "type": 16
+              },
+              {
+                "owner": "example.slop.",
+                "rdata": [
+                  "EmhlbGxvIGZyb20gc2xvcGRucw==",
+                  "AA=="
+                ],
+                "rr_class": 1,
+                "ttl": 60,
+                "type": 65280
+              },
+              {
+                "owner": "*.example.slop.",
+                "rdata": [
+                  "wAACYw=="
+                ],
+                "rr_class": 1,
+                "ttl": 120,
+                "type": 1
+              },
+              {
+                "owner": "alias.example.slop.",
+                "rdata": [
+                  "A3d3dwdleGFtcGxlBHNsb3AA"
+                ],
+                "rr_class": 1,
+                "ttl": 300,
+                "type": 5
+              },
+              {
+                "owner": "_sip._tcp.example.slop.",
+                "rdata": [
+                  "AAoAPBPEA3NpcAdleGFtcGxlBHNsb3AA"
+                ],
+                "rr_class": 1,
+                "ttl": 300,
+                "type": 33
+              },
+              {
+                "owner": "legacy.example.slop.",
+                "rdata": [
+                  "B2V4YW1wbGUEc2xvcAA="
+                ],
+                "rr_class": 1,
+                "ttl": 300,
+                "type": 39
+              },
+              {
+                "owner": "www.example.slop.",
+                "rdata": [
+                  "IAENuAAAAAAAAAAAAAAAEA=="
+                ],
+                "rr_class": 1,
+                "ttl": 300,
+                "type": 28
+              },
+              {
+                "owner": "example.slop.",
+                "rdata": [
+                  "3q2+7w=="
+                ],
+                "rr_class": 1,
+                "ttl": 300,
+                "type": 65534
+              }
+            ]
+          }
+        ]
+      },
+      "session_id_hex": "a0a1a2a3a4a5a6a7a8a9aaabacadaeaf",
+      "payload_hex": "082a1283050a0d6578616d706c652e736c6f702e12260a117777772e6578616d706c652e736c6f702e1001180120ac022a04c00002142a04c000020a12570a0d6578616d706c652e736c6f702e1006180120901c2a3f036e733107736c6f70646e7304736c6f70000a686f73746d617374657207736c6f70646e7304736c6f70000000000700000e1000000384001275000000012c123e0a0d6578616d706c652e736c6f702e1002180120901c2a12036e733207736c6f70646e7304736c6f70002a12036e733107736c6f70646e7304736c6f700012420a0d6578616d706c652e736c6f702e100f180120901c2a140014036d7832076578616d706c6504736c6f70002a14000a036d7831076578616d706c6504736c6f700012320a0d6578616d706c652e736c6f702e1010180120ac022a0c0b763d73706631202d616c6c2a0c0568656c6c6f05776f726c64122f0a0d6578616d706c652e736c6f702e1080fe031801203c2a131268656c6c6f2066726f6d20736c6f70646e732a0100121d0a0f2a2e6578616d706c652e736c6f702e1001180120782a04c000026312300a13616c6961732e6578616d706c652e736c6f702e1005180120ac022a1203777777076578616d706c6504736c6f7000123a0a175f7369702e5f7463702e6578616d706c652e736c6f702e1021180120ac022a18000a003c13c403736970076578616d706c6504736c6f7000122d0a146c65676163792e6578616d706c652e736c6f702e1027180120ac022a0e076578616d706c6504736c6f7000122c0a117777772e6578616d706c652e736c6f702e101c180120ac022a1020010db8000000000000000000000010121e0a0d6578616d706c652e736c6f702e10feff03180120ac022a04deadbeef",
+      "signed_message_hex": "736c6f70646e732d73796e632d76310005a0a1a2a3a4a5a6a7a8a9aaabacadaeaf082a1283050a0d6578616d706c652e736c6f702e12260a117777772e6578616d706c652e736c6f702e1001180120ac022a04c00002142a04c000020a12570a0d6578616d706c652e736c6f702e1006180120901c2a3f036e733107736c6f70646e7304736c6f70000a686f73746d617374657207736c6f70646e7304736c6f70000000000700000e1000000384001275000000012c123e0a0d6578616d706c652e736c6f702e1002180120901c2a12036e733207736c6f70646e7304736c6f70002a12036e733107736c6f70646e7304736c6f700012420a0d6578616d706c652e736c6f702e100f180120901c2a140014036d7832076578616d706c6504736c6f70002a14000a036d7831076578616d706c6504736c6f700012320a0d6578616d706c652e736c6f702e1010180120ac022a0c0b763d73706631202d616c6c2a0c0568656c6c6f05776f726c64122f0a0d6578616d706c652e736c6f702e1080fe031801203c2a131268656c6c6f2066726f6d20736c6f70646e732a0100121d0a0f2a2e6578616d706c652e736c6f702e1001180120782a04c000026312300a13616c6961732e6578616d706c652e736c6f702e1005180120ac022a1203777777076578616d706c6504736c6f7000123a0a175f7369702e5f7463702e6578616d706c652e736c6f702e1021180120ac022a18000a003c13c403736970076578616d706c6504736c6f7000122d0a146c65676163792e6578616d706c652e736c6f702e1027180120ac022a0e076578616d706c6504736c6f7000122c0a117777772e6578616d706c652e736c6f702e101c180120ac022a1020010db8000000000000000000000010121e0a0d6578616d706c652e736c6f702e10feff03180120ac022a04deadbeef",
+      "signed_by": "backend-sync",
+      "signature_hex": "057a02d0f4619c6f13e6e61ac2ba0e862abba867794aa7f9be6c7818658040be75ab5de940c933e330a376b9d08896a0552ffbfc42bc54dcf791cf4dbec9ff09",
+      "frame_hex": "1acd050a8805082a1283050a0d6578616d706c652e736c6f702e12260a117777772e6578616d706c652e736c6f702e1001180120ac022a04c00002142a04c000020a12570a0d6578616d706c652e736c6f702e1006180120901c2a3f036e733107736c6f70646e7304736c6f70000a686f73746d617374657207736c6f70646e7304736c6f70000000000700000e1000000384001275000000012c123e0a0d6578616d706c652e736c6f702e1002180120901c2a12036e733207736c6f70646e7304736c6f70002a12036e733107736c6f70646e7304736c6f700012420a0d6578616d706c652e736c6f702e100f180120901c2a140014036d7832076578616d706c6504736c6f70002a14000a036d7831076578616d706c6504736c6f700012320a0d6578616d706c652e736c6f702e1010180120ac022a0c0b763d73706631202d616c6c2a0c0568656c6c6f05776f726c64122f0a0d6578616d706c652e736c6f702e1080fe031801203c2a131268656c6c6f2066726f6d20736c6f70646e732a0100121d0a0f2a2e6578616d706c652e736c6f702e1001180120782a04c000026312300a13616c6961732e6578616d706c652e736c6f702e1005180120ac022a1203777777076578616d706c6504736c6f7000123a0a175f7369702e5f7463702e6578616d706c652e736c6f702e1021180120ac022a18000a003c13c403736970076578616d706c6504736c6f7000122d0a146c65676163792e6578616d706c652e736c6f702e1027180120ac022a0e076578616d706c6504736c6f7000122c0a117777772e6578616d706c652e736c6f702e101c180120ac022a1020010db8000000000000000000000010121e0a0d6578616d706c652e736c6f702e10feff03180120ac022a04deadbeef1240057a02d0f4619c6f13e6e61ac2ba0e862abba867794aa7f9be6c7818658040be75ab5de940c933e330a376b9d08896a0552ffbfc42bc54dcf791cf4dbec9ff09"
+    },
+    {
+      "name": "snapshot_chunk_2",
+      "direction": "server_to_client",
+      "frame_kind": "FRAME_KIND_SNAPSHOT_CHUNK",
+      "frame_kind_value": 5,
+      "message_type": "slopdns.sync.v1.SnapshotChunk",
+      "message": {
+        "revision": "42",
+        "zones": [
+          {
+            "apex": "b.a.slop.",
+            "rrsets": [
+              {
+                "owner": "b.a.slop.",
+                "rdata": [
+                  "A25zMQdzbG9wZG5zBHNsb3AACmhvc3RtYXN0ZXIHc2xvcGRucwRzbG9wAAAAAAEAAA4QAAADhAASdQAAAAEs"
+                ],
+                "rr_class": 1,
+                "ttl": 3600,
+                "type": 6
+              },
+              {
+                "owner": "b.a.slop.",
+                "rdata": [
+                  "A25zMQdzbG9wZG5zBHNsb3AA"
+                ],
+                "rr_class": 1,
+                "ttl": 3600,
+                "type": 2
+              }
+            ]
+          },
+          {
+            "apex": "a.slop.",
+            "rrsets": [
+              {
+                "owner": "a.slop.",
+                "rdata": [
+                  "A25zMQdzbG9wZG5zBHNsb3AA"
+                ],
+                "rr_class": 1,
+                "ttl": 3600,
+                "type": 2
+              },
+              {
+                "owner": "a.slop.",
+                "rdata": [
+                  "A25zMQdzbG9wZG5zBHNsb3AACmhvc3RtYXN0ZXIHc2xvcGRucwRzbG9wAAAAAAMAAA4QAAADhAASdQAAAAEs"
+                ],
+                "rr_class": 1,
+                "ttl": 3600,
+                "type": 6
+              }
+            ]
+          }
+        ]
+      },
+      "session_id_hex": "a0a1a2a3a4a5a6a7a8a9aaabacadaeaf",
+      "payload_hex": "082a1288010a09622e612e736c6f702e12530a09622e612e736c6f702e1006180120901c2a3f036e733107736c6f70646e7304736c6f70000a686f73746d617374657207736c6f70646e7304736c6f70000000000100000e1000000384001275000000012c12260a09622e612e736c6f702e1002180120901c2a12036e733107736c6f70646e7304736c6f70001282010a07612e736c6f702e12240a07612e736c6f702e1002180120901c2a12036e733107736c6f70646e7304736c6f700012510a07612e736c6f702e1006180120901c2a3f036e733107736c6f70646e7304736c6f70000a686f73746d617374657207736c6f70646e7304736c6f70000000000300000e1000000384001275000000012c",
+      "signed_message_hex": "736c6f70646e732d73796e632d76310005a0a1a2a3a4a5a6a7a8a9aaabacadaeaf082a1288010a09622e612e736c6f702e12530a09622e612e736c6f702e1006180120901c2a3f036e733107736c6f70646e7304736c6f70000a686f73746d617374657207736c6f70646e7304736c6f70000000000100000e1000000384001275000000012c12260a09622e612e736c6f702e1002180120901c2a12036e733107736c6f70646e7304736c6f70001282010a07612e736c6f702e12240a07612e736c6f702e1002180120901c2a12036e733107736c6f70646e7304736c6f700012510a07612e736c6f702e1006180120901c2a3f036e733107736c6f70646e7304736c6f70000a686f73746d617374657207736c6f70646e7304736c6f70000000000300000e1000000384001275000000012c",
+      "signed_by": "backend-sync",
+      "signature_hex": "e9a79e488c82650071f240ca979735d5ab5853d06f27f756f12838e6d7e0c99f2904feb988241f4e0cf44035342cff3625714b1e44b99619fd8e62f8e1db8e0a",
+      "frame_hex": "1ad7020a9202082a1288010a09622e612e736c6f702e12530a09622e612e736c6f702e1006180120901c2a3f036e733107736c6f70646e7304736c6f70000a686f73746d617374657207736c6f70646e7304736c6f70000000000100000e1000000384001275000000012c12260a09622e612e736c6f702e1002180120901c2a12036e733107736c6f70646e7304736c6f70001282010a07612e736c6f702e12240a07612e736c6f702e1002180120901c2a12036e733107736c6f70646e7304736c6f700012510a07612e736c6f702e1006180120901c2a3f036e733107736c6f70646e7304736c6f70000a686f73746d617374657207736c6f70646e7304736c6f70000000000300000e1000000384001275000000012c1240e9a79e488c82650071f240ca979735d5ab5853d06f27f756f12838e6d7e0c99f2904feb988241f4e0cf44035342cff3625714b1e44b99619fd8e62f8e1db8e0a"
+    },
+    {
+      "name": "snapshot_end",
+      "direction": "server_to_client",
+      "frame_kind": "FRAME_KIND_SNAPSHOT_END",
+      "frame_kind_value": 6,
+      "message_type": "slopdns.sync.v1.SnapshotEnd",
+      "message": {
+        "digest": "8aH6S4u+EByVHba/Lb9KmXpdwl9nCe4aTikPvhKjVlU=",
+        "revision": "42"
+      },
+      "session_id_hex": "a0a1a2a3a4a5a6a7a8a9aaabacadaeaf",
+      "payload_hex": "082a1220f1a1fa4b8bbe101c951db6bf2dbf4a997a5dc25f6709ee1a4e290fbe12a35655",
+      "signed_message_hex": "736c6f70646e732d73796e632d76310006a0a1a2a3a4a5a6a7a8a9aaabacadaeaf082a1220f1a1fa4b8bbe101c951db6bf2dbf4a997a5dc25f6709ee1a4e290fbe12a35655",
+      "signed_by": "backend-sync",
+      "signature_hex": "f19750df29818fc2ba81c65d5536eede99b68bca37d3ea4043b1e02e282ee69e12b6d8eb3ef7ab68fb7a6ff7ad1ef72ab8ee2bffdf034bf2d8fbab8a1fa00307",
+      "frame_hex": "22680a24082a1220f1a1fa4b8bbe101c951db6bf2dbf4a997a5dc25f6709ee1a4e290fbe12a356551240f19750df29818fc2ba81c65d5536eede99b68bca37d3ea4043b1e02e282ee69e12b6d8eb3ef7ab68fb7a6ff7ad1ef72ab8ee2bffdf034bf2d8fbab8a1fa00307"
+    },
+    {
+      "name": "ack_snapshot",
+      "direction": "client_to_server",
+      "frame_kind": "FRAME_KIND_ACK",
+      "frame_kind_value": 2,
+      "message_type": "slopdns.sync.v1.Ack",
+      "message": {
+        "revision": "42"
+      },
+      "session_id_hex": "a0a1a2a3a4a5a6a7a8a9aaabacadaeaf",
+      "payload_hex": "082a",
+      "signed_message_hex": "736c6f70646e732d73796e632d76310002a0a1a2a3a4a5a6a7a8a9aaabacadaeaf082a",
+      "signed_by": "dns-dns1",
+      "signature_hex": "19845c2107c863a740fcdeeb2b82ac311cdc5fbdb9f93612aff557772f7f7b556af4e594540f85d5eae94f9e58bc4951ab7053105cdcde039554441e3fcf170b",
+      "frame_hex": "12460a02082a124019845c2107c863a740fcdeeb2b82ac311cdc5fbdb9f93612aff557772f7f7b556af4e594540f85d5eae94f9e58bc4951ab7053105cdcde039554441e3fcf170b"
+    },
+    {
+      "name": "delta",
+      "direction": "server_to_client",
+      "frame_kind": "FRAME_KIND_DELTA",
+      "frame_kind_value": 7,
+      "message_type": "slopdns.sync.v1.Delta",
+      "message": {
+        "ops": [
+          {
+            "put_rrset": {
+              "apex": "example.slop.",
+              "rrset": {
+                "owner": "api.example.slop.",
+                "rdata": [
+                  "wAACHg=="
+                ],
+                "rr_class": 1,
+                "ttl": 60,
+                "type": 1
+              }
+            }
+          },
+          {
+            "delete_rrset": {
+              "apex": "example.slop.",
+              "owner": "alias.example.slop.",
+              "rr_class": 1,
+              "type": 5
+            }
+          },
+          {
+            "put_rrset": {
+              "apex": "example.slop.",
+              "rrset": {
+                "owner": "example.slop.",
+                "rdata": [
+                  "A25zMQdzbG9wZG5zBHNsb3AACmhvc3RtYXN0ZXIHc2xvcGRucwRzbG9wAAAAAAgAAA4QAAADhAASdQAAAAEs"
+                ],
+                "rr_class": 1,
+                "ttl": 3600,
+                "type": 6
+              }
+            }
+          },
+          {
+            "delete_zone": "b.a.slop."
+          },
+          {
+            "put_zone": {
+              "apex": "new.slop.",
+              "rrsets": [
+                {
+                  "owner": "new.slop.",
+                  "rdata": [
+                    "A25zMQdzbG9wZG5zBHNsb3AACmhvc3RtYXN0ZXIHc2xvcGRucwRzbG9wAAAAAAEAAA4QAAADhAASdQAAAAEs"
+                  ],
+                  "rr_class": 1,
+                  "ttl": 3600,
+                  "type": 6
+                },
+                {
+                  "owner": "new.slop.",
+                  "rdata": [
+                    "A25zMQdzbG9wZG5zBHNsb3AA"
+                  ],
+                  "rr_class": 1,
+                  "ttl": 3600,
+                  "type": 2
+                }
+              ]
+            }
+          }
+        ],
+        "prev_revision": "42",
+        "revision": "43"
+      },
+      "session_id_hex": "a0a1a2a3a4a5a6a7a8a9aaabacadaeaf",
+      "payload_hex": "082a102b1a321a300a0d6578616d706c652e736c6f702e121f0a116170692e6578616d706c652e736c6f702e10011801203c2a04c000021e1a2a22280a0d6578616d706c652e736c6f702e1213616c6961732e6578616d706c652e736c6f702e180520011a6a1a680a0d6578616d706c652e736c6f702e12570a0d6578616d706c652e736c6f702e1006180120901c2a3f036e733107736c6f70646e7304736c6f70000a686f73746d617374657207736c6f70646e7304736c6f70000000000800000e1000000384001275000000012c1a0b1209622e612e736c6f702e1a8b010a88010a096e65772e736c6f702e12530a096e65772e736c6f702e1006180120901c2a3f036e733107736c6f70646e7304736c6f70000a686f73746d617374657207736c6f70646e7304736c6f70000000000100000e1000000384001275000000012c12260a096e65772e736c6f702e1002180120901c2a12036e733107736c6f70646e7304736c6f7000",
+      "signed_message_hex": "736c6f70646e732d73796e632d76310007a0a1a2a3a4a5a6a7a8a9aaabacadaeaf082a102b1a321a300a0d6578616d706c652e736c6f702e121f0a116170692e6578616d706c652e736c6f702e10011801203c2a04c000021e1a2a22280a0d6578616d706c652e736c6f702e1213616c6961732e6578616d706c652e736c6f702e180520011a6a1a680a0d6578616d706c652e736c6f702e12570a0d6578616d706c652e736c6f702e1006180120901c2a3f036e733107736c6f70646e7304736c6f70000a686f73746d617374657207736c6f70646e7304736c6f70000000000800000e1000000384001275000000012c1a0b1209622e612e736c6f702e1a8b010a88010a096e65772e736c6f702e12530a096e65772e736c6f702e1006180120901c2a3f036e733107736c6f70646e7304736c6f70000a686f73746d617374657207736c6f70646e7304736c6f70000000000100000e1000000384001275000000012c12260a096e65772e736c6f702e1002180120901c2a12036e733107736c6f70646e7304736c6f7000",
+      "signed_by": "backend-sync",
+      "signature_hex": "2f850b054c2cefdada9cb37029e1f63ce24de9146ab2f6fcef6eb8b89109552d08f6b3f5d50cb38b15108e08f277e9cf93286cf18ee494b8fc483232de9df40f",
+      "frame_hex": "2ab0030aeb02082a102b1a321a300a0d6578616d706c652e736c6f702e121f0a116170692e6578616d706c652e736c6f702e10011801203c2a04c000021e1a2a22280a0d6578616d706c652e736c6f702e1213616c6961732e6578616d706c652e736c6f702e180520011a6a1a680a0d6578616d706c652e736c6f702e12570a0d6578616d706c652e736c6f702e1006180120901c2a3f036e733107736c6f70646e7304736c6f70000a686f73746d617374657207736c6f70646e7304736c6f70000000000800000e1000000384001275000000012c1a0b1209622e612e736c6f702e1a8b010a88010a096e65772e736c6f702e12530a096e65772e736c6f702e1006180120901c2a3f036e733107736c6f70646e7304736c6f70000a686f73746d617374657207736c6f70646e7304736c6f70000000000100000e1000000384001275000000012c12260a096e65772e736c6f702e1002180120901c2a12036e733107736c6f70646e7304736c6f700012402f850b054c2cefdada9cb37029e1f63ce24de9146ab2f6fcef6eb8b89109552d08f6b3f5d50cb38b15108e08f277e9cf93286cf18ee494b8fc483232de9df40f"
+    },
+    {
+      "name": "empty_delta",
+      "direction": "server_to_client",
+      "frame_kind": "FRAME_KIND_DELTA",
+      "frame_kind_value": 7,
+      "message_type": "slopdns.sync.v1.Delta",
+      "message": {
+        "prev_revision": "43",
+        "revision": "44"
+      },
+      "session_id_hex": "a0a1a2a3a4a5a6a7a8a9aaabacadaeaf",
+      "payload_hex": "082b102c",
+      "signed_message_hex": "736c6f70646e732d73796e632d76310007a0a1a2a3a4a5a6a7a8a9aaabacadaeaf082b102c",
+      "signed_by": "backend-sync",
+      "signature_hex": "244d455cf02b0fc193cce69c2b30bb1570cc14e7736028f77eedefb4c25bae89b79176bdacbdc73db9ded086303e512d6df8ddc1ba53caa34f542ad85377ca0a",
+      "frame_hex": "2a480a04082b102c1240244d455cf02b0fc193cce69c2b30bb1570cc14e7736028f77eedefb4c25bae89b79176bdacbdc73db9ded086303e512d6df8ddc1ba53caa34f542ad85377ca0a"
+    },
+    {
+      "name": "heartbeat",
+      "direction": "server_to_client",
+      "frame_kind": "FRAME_KIND_HEARTBEAT",
+      "frame_kind_value": 8,
+      "message_type": "slopdns.sync.v1.Heartbeat",
+      "message": {
+        "current_revision": "44",
+        "unix_ms": "1760000000000"
+      },
+      "session_id_hex": "a0a1a2a3a4a5a6a7a8a9aaabacadaeaf",
+      "payload_hex": "082c108080b3c19c33",
+      "signed_message_hex": "736c6f70646e732d73796e632d76310008a0a1a2a3a4a5a6a7a8a9aaabacadaeaf082c108080b3c19c33",
+      "signed_by": "backend-sync",
+      "signature_hex": "99fb239b784d05759dc9a9da3383a6b8554abb18f01a6846e59c5681dfd9a3efd3c8767d661b3a5bc62454e8158c766d485c3cb9dcbbbc4120c5d67dc0b1dd0a",
+      "frame_hex": "324d0a09082c108080b3c19c33124099fb239b784d05759dc9a9da3383a6b8554abb18f01a6846e59c5681dfd9a3efd3c8767d661b3a5bc62454e8158c766d485c3cb9dcbbbc4120c5d67dc0b1dd0a"
+    },
+    {
+      "name": "ack_delta",
+      "direction": "client_to_server",
+      "frame_kind": "FRAME_KIND_ACK",
+      "frame_kind_value": 2,
+      "message_type": "slopdns.sync.v1.Ack",
+      "message": {
+        "revision": "44"
+      },
+      "session_id_hex": "a0a1a2a3a4a5a6a7a8a9aaabacadaeaf",
+      "payload_hex": "082c",
+      "signed_message_hex": "736c6f70646e732d73796e632d76310002a0a1a2a3a4a5a6a7a8a9aaabacadaeaf082c",
+      "signed_by": "dns-dns1",
+      "signature_hex": "758412c69b7049dc8ddba1f7d47752e5701c1a1f979543a4457aa8d77a663b6e1e0e5c122c7524a045e860ad5dfef0d602928b395d258856b6e2e7038d73b606",
+      "frame_hex": "12460a02082c1240758412c69b7049dc8ddba1f7d47752e5701c1a1f979543a4457aa8d77a663b6e1e0e5c122c7524a045e860ad5dfef0d602928b395d258856b6e2e7038d73b606"
+    }
+  ],
+  "keys": [
+    {
+      "name": "backend-sync",
+      "seed_derived_by": "SHA-256(\"slopdns-test-key:backend-sync\")",
+      "seed_hex": "1c14e5a036734eafd73ae66483bd0adf901223bc63d596b6551662fd989a395c",
+      "public_key_hex": "6bc6eb6e049bee08eff64efda17d6b0bfe67afc815b94bfbe41261c258efa62b"
+    },
+    {
+      "name": "dns-dns1",
+      "seed_derived_by": "SHA-256(\"slopdns-test-key:dns-dns1\")",
+      "seed_hex": "968f0254e8d56fb07f0dfafdc68f578c143305f0b8e35dc785312f43cc9807ab",
+      "public_key_hex": "ea4c4c742f886adb38d73d75f3e17829f414f58fab77f5425e37cabfadbf2ba0"
+    },
+    {
+      "name": "untrusted",
+      "seed_derived_by": "SHA-256(\"slopdns-test-key:untrusted\")",
+      "seed_hex": "469830d08c98b754fc100612888a6c4029da209d496b01f9199517670100f278",
+      "public_key_hex": "4b9a8ef888012592fee6d96b6108644ec57ccdf0349907c77e20d11ff33f66f1"
+    }
+  ],
+  "negative": [
+    {
+      "name": "tampered_payload",
+      "description": "heartbeat payload with the last byte flipped, original signature",
+      "frame_kind": "FRAME_KIND_HEARTBEAT",
+      "frame_kind_value": 8,
+      "session_id_hex": "a0a1a2a3a4a5a6a7a8a9aaabacadaeaf",
+      "payload_hex": "082c108080b3c19c32",
+      "signature_hex": "99fb239b784d05759dc9a9da3383a6b8554abb18f01a6846e59c5681dfd9a3efd3c8767d661b3a5bc62454e8158c766d485c3cb9dcbbbc4120c5d67dc0b1dd0a",
+      "verify_with": "backend-sync",
+      "expected_valid": false
+    },
+    {
+      "name": "wrong_frame_kind",
+      "description": "valid heartbeat signature verified as a DELTA frame (frame received in the delta slot)",
+      "frame_kind": "FRAME_KIND_DELTA",
+      "frame_kind_value": 7,
+      "session_id_hex": "a0a1a2a3a4a5a6a7a8a9aaabacadaeaf",
+      "payload_hex": "082c108080b3c19c33",
+      "signature_hex": "99fb239b784d05759dc9a9da3383a6b8554abb18f01a6846e59c5681dfd9a3efd3c8767d661b3a5bc62454e8158c766d485c3cb9dcbbbc4120c5d67dc0b1dd0a",
+      "verify_with": "backend-sync",
+      "expected_valid": false
+    },
+    {
+      "name": "wrong_session_id",
+      "description": "valid heartbeat replayed into another session",
+      "frame_kind": "FRAME_KIND_HEARTBEAT",
+      "frame_kind_value": 8,
+      "session_id_hex": "b0b1b2b3b4b5b6b7b8b9babbbcbdbebf",
+      "payload_hex": "082c108080b3c19c33",
+      "signature_hex": "99fb239b784d05759dc9a9da3383a6b8554abb18f01a6846e59c5681dfd9a3efd3c8767d661b3a5bc62454e8158c766d485c3cb9dcbbbc4120c5d67dc0b1dd0a",
+      "verify_with": "backend-sync",
+      "expected_valid": false
+    },
+    {
+      "name": "untrusted_signer",
+      "description": "heartbeat correctly signed by a key that is not the pinned backend key",
+      "frame_kind": "FRAME_KIND_HEARTBEAT",
+      "frame_kind_value": 8,
+      "session_id_hex": "a0a1a2a3a4a5a6a7a8a9aaabacadaeaf",
+      "payload_hex": "082c108080b3c19c33",
+      "signature_hex": "22a2456d768be924775cd33919425e0c24b4dfaedb6ab764e71d376f7e017a5b9f73b85f09f334c2682b9d0499df32aad61a49af2b383b1b9b038bec479ae507",
+      "verify_with": "backend-sync",
+      "expected_valid": false
+    },
+    {
+      "name": "truncated_signature",
+      "description": "signature shorter than 64 bytes",
+      "frame_kind": "FRAME_KIND_HEARTBEAT",
+      "frame_kind_value": 8,
+      "session_id_hex": "a0a1a2a3a4a5a6a7a8a9aaabacadaeaf",
+      "payload_hex": "082c108080b3c19c33",
+      "signature_hex": "99fb239b784d05759dc9a9da3383a6b8554abb18f01a6846e59c5681dfd9a3efd3c8767d661b3a5bc62454e8158c766d485c3cb9dcbbbc4120c5d67dc0b1dd",
+      "verify_with": "backend-sync",
+      "expected_valid": false
+    },
+    {
+      "name": "empty_signature",
+      "description": "signature field empty",
+      "frame_kind": "FRAME_KIND_HEARTBEAT",
+      "frame_kind_value": 8,
+      "session_id_hex": "a0a1a2a3a4a5a6a7a8a9aaabacadaeaf",
+      "payload_hex": "082c108080b3c19c33",
+      "signature_hex": "",
+      "verify_with": "backend-sync",
+      "expected_valid": false
+    },
+    {
+      "name": "welcome_with_session_id",
+      "description": "Welcome must be verified with the all-zero session id; using the session id from its payload must fail",
+      "frame_kind": "FRAME_KIND_WELCOME",
+      "frame_kind_value": 3,
+      "session_id_hex": "a0a1a2a3a4a5a6a7a8a9aaabacadaeaf",
+      "payload_hex": "0a10a0a1a2a3a4a5a6a7a8a9aaabacadaeaf12100102030405060708090a0b0c0d0e0f10182a20012888273001",
+      "signature_hex": "383d78526ecfe369579f2dbd55aae7b0cd92e0bf879465b5f2c96d359c6aa47a019823d9e8754f868229c29a6c9e0fd61bf7f5e6eb9aa3b6222e8ff570bab508",
+      "verify_with": "backend-sync",
+      "expected_valid": false
+    },
+    {
+      "name": "hello_verified_with_backend_key",
+      "description": "Hello signed by the node key must not verify against the backend key",
+      "frame_kind": "FRAME_KIND_HELLO",
+      "frame_kind_value": 1,
+      "session_id_hex": "00000000000000000000000000000000",
+      "payload_hex": "0a04646e73311a100102030405060708090a0b0c0d0e0f102001",
+      "signature_hex": "d084d7eb477b82e284add3551270d8888730f72e138fb8ed8810998e6f16b59e0f75cec6321eddcd9d8cecb42f71df98dd93ca7a1dd5792dc75830d316dcde0b",
+      "verify_with": "backend-sync",
+      "expected_valid": false
+    }
+  ],
+  "session_id_for_hello_and_welcome_hex": "00000000000000000000000000000000",
+  "session_id_hex": "a0a1a2a3a4a5a6a7a8a9aaabacadaeaf",
+  "signature_algorithm": "Ed25519"
+}

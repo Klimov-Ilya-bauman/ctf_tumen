@@ -1,0 +1,21 @@
+---
+import BaseLayout from './BaseLayout.astro';
+import Header from '../components/Header.astro';
+import Footer from '../components/Footer.astro';
+import CompetitionHeader from '../components/CompetitionHeader.astro';
+import CompetitionNav from '../components/CompetitionNav.astro';
+import Countdown from '../components/Countdown.astro';
+import InterfaceCaption from '../components/InterfaceCaption.astro';
+interface Props {title:string;page:string}
+const {title,page}=Astro.props;
+---
+<BaseLayout title={title+' · NeuroslopCTF'}>
+ <div class="container"><Header current="competitions" />
+ <main id="main-content" class={`page-shell v2-page page-${page}`}>
+  <div class="competition-banner grid-shell"><CompetitionHeader /><Countdown target="" /></div><CompetitionNav />
+  <div class="page-intro"><div class="eyebrow">Раздел соревнования</div>
+  <h1 class="page-title gradient-text">{title}</h1><InterfaceCaption page={page} /></div>
+  <div data-page={page} aria-busy="true"><p role="status">Загружаем содержимое…</p></div>
+ </main></div><Footer />
+ <script>import {boot} from '../lib/ui/app';void boot();</script>
+</BaseLayout>

@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lobby · Homomorphic Go</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body data-page="lobby">
+<header class="topbar">
+  <a class="brand" href="lobby.html">Homomorphic Go</a>
+  <span class="spacer"></span>
+  <span id="me" class="me"></span>
+</header>
+<main class="wrap">
+  <section class="panel actions">
+    <button id="create-game-btn" type="button">Create game</button>
+    <form id="join-form" class="join-form">
+      <label for="join-id">Join game by id</label>
+      <input id="join-id" type="text" inputmode="numeric" placeholder="Game id">
+      <button id="join-btn" type="submit">Join</button>
+    </form>
+    <p id="lobby-error" class="error" role="alert"></p>
+  </section>
+  <section class="panel">
+    <h2>Games</h2>
+    <table class="games">
+      <thead><tr><th>#</th><th>Black</th><th>White</th><th>Status</th><th></th></tr></thead>
+      <tbody id="games-list"></tbody>
+    </table>
+  </section>
+</main>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

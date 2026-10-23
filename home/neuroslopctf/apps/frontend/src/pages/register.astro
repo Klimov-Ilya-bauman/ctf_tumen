@@ -1,0 +1,228 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import Header from '../components/Header.astro';
+import Footer from '../components/Footer.astro';
+import InterfaceCaption from '../components/InterfaceCaption.astro';
+---
+
+<BaseLayout
+  title="Регистрация · NeuroslopCTF"
+  description="Создание учётной записи NeuroslopCTF."
+>
+  <div class="container">
+    <Header current="auth" />
+
+    <main id="main-content" class="page-shell">
+      <div class="auth-layout">
+        <section class="form-card card" data-aos="fade-up" aria-labelledby="register-title">
+          <div class="eyebrow">Создание учётной записи</div>
+          <h1 id="register-title" class="auth-title">Создать новый аккаунт</h1>
+          <InterfaceCaption page="register" />
+          <p class="auth-copy">
+            Имя будет видно другим участникам. Пароль используется для входа в аккаунт.
+          </p>
+
+          <form class="form-grid" data-register-form>
+            <div class="form-field">
+              <label class="field-label" for="register-username">Имя пользователя</label>
+              <input
+                class="text-input"
+                id="register-username"
+                name="username"
+                type="text"
+                autocomplete="username"
+                minlength="3"
+                maxlength="40"
+                required
+                autofocus
+                aria-describedby="register-username-hint"
+                placeholder="Никита Ш."
+              />
+              <p id="register-username-hint" class="field-hint">
+                От 3 до 40 символов, без пробелов. Это имя будет вашим именем пользователя, видимым другим пользователям.
+              </p>
+            </div>
+
+            <div class="form-field">
+              <label class="field-label" for="register-password">Пароль</label>
+              <input
+                class="text-input"
+                id="register-password"
+                name="password"
+                type="password"
+                autocomplete="new-password"
+                minlength="6"
+                maxlength="200"
+                required
+                aria-describedby="register-password-hint"
+                placeholder="не менее шести символов"
+              />
+              <p id="register-password-hint" class="field-hint">
+                От 6 до 200 символов. Этот пароль понадобится для входа в аккаунт.
+              </p>
+            </div>
+
+            <div class="form-field">
+              <label class="field-label" for="register-password-confirm">Пароль ещё раз</label>
+              <input
+                class="text-input"
+                id="register-password-confirm"
+                name="password_confirm"
+                type="password"
+                autocomplete="new-password"
+                minlength="6"
+                maxlength="200"
+                required
+                aria-describedby="register-password-confirm-hint"
+                placeholder="повторите пароль"
+              />
+              <p id="register-password-confirm-hint" class="field-hint">
+                Введите тот же пароль ещё раз, чтобы проверить совпадение.
+              </p>
+            </div>
+
+            <p
+              class="status-message error"
+              data-form-status
+              role="alert"
+              aria-live="assertive"
+              aria-atomic="true"
+              hidden
+            ></p>
+
+            <button class="btn-primary btn-wide" type="submit" data-submit>
+              Зарегистрироваться
+            </button>
+            <p class="field-hint">Нажмите «Зарегистрироваться», чтобы отправить данные и создать аккаунт.</p>
+          </form>
+
+          <p class="auth-switch">
+            Аккаунт уже создан?
+            <a href="/login" data-auth-switch>Войти в существующий аккаунт</a>
+          </p>
+        </section>
+
+        <aside class="auth-side grid-shell" data-aos="fade-up" data-aos-delay="90" aria-labelledby="register-side-title">
+          <div class="eyebrow">Возможности аккаунта</div>
+          <h2 id="register-side-title" class="panel-title">Всё необходимое для начала работы</h2>
+          <ul class="auth-list">
+            <li><span aria-hidden="true">1</span><div>Собственный профиль со сведениями об участии.</div></li>
+            <li><span aria-hidden="true">2</span><div>Создание соревнований и заданий с правами организатора.</div></li>
+            <li><span aria-hidden="true">3</span><div>История решений и полученные токены.</div></li>
+          </ul>
+          <p class="side-note">Рабочая заметка: после регистрации вход выполняется автоматически.</p>
+        </aside>
+      </div>
+    </main>
+  </div>
+
+  <Footer />
+
+  <script>
+    import { errorMessage, safeNextPath } from '../lib/api';
+
+    import {register} from '../lib/endpoints';
+    const form = document.querySelector<HTMLFormElement>('[data-register-form]');
+    const status = form?.querySelector<HTMLElement>('[data-form-status]');
+    const submit = form?.querySelector<HTMLButtonElement>('[data-submit]');
+    const password = form?.querySelector<HTMLInputElement>('[name="password"]');
+    const confirmation = form?.querySelector<HTMLInputElement>('[name="password_confirm"]');
+    const switchLink = document.querySelector<HTMLAnchorElement>('[data-auth-switch]');
+    const nextPath = safeNextPath('');
+
+    if (switchLink && nextPath) {
+      switchLink.href = `/login?next=${encodeURIComponent(nextPath)}`;
+    }
+
+    const showStatus = (message: string, kind: 'error' | 'success') => {
+      if (!status) return;
+      status.textContent = message;
+      status.classList.remove('error', 'success');
+      status.classList.add(kind);
+      status.setAttribute('role', kind === 'error' ? 'alert' : 'status');
+      status.setAttribute('aria-live', kind === 'error' ? 'assertive' : 'polite');
+      status.removeAttribute('hidden');
+    };
+
+    confirmation?.addEventListener('input', () => confirmation.setCustomValidity(''));
+    password?.addEventListener('input', () => confirmation?.setCustomValidity(''));
+
+    form?.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      if (!form.reportValidity()) return;
+
+      const username = form.querySelector<HTMLInputElement>('[name="username"]');
+      if (!username || !password || !confirmation) return;
+
+      if (password.value !== confirmation.value) {
+        confirmation.setCustomValidity('Пароли не совпадают');
+        confirmation.reportValidity();
+        showStatus('Повторный пароль не совпадает.', 'error');
+        return;
+      }
+
+      status?.setAttribute('hidden', '');
+      form.setAttribute('aria-busy', 'true');
+      if (submit) {
+        submit.disabled = true;
+        submit.textContent = 'Создаём аккаунт…';
+      }
+
+      try {
+        await register({username: username.value.trim(),password: password.value});
+        showStatus('Аккаунт создан. Открываем соревнования…', 'success');
+        window.location.replace(safeNextPath('/competitions'));
+      } catch (error) {
+        showStatus(errorMessage(error), 'error');
+        form.removeAttribute('aria-busy');
+        if (submit) {
+          submit.disabled = false;
+          submit.textContent = 'Зарегистрироваться';
+        }
+      }
+    });
+  </script>
+
+  <style>
+    .auth-title {
+      margin: 10px 0 0;
+      font-size: clamp(34px, 5vw, 58px);
+      font-weight: 950;
+      letter-spacing: -0.05em;
+      line-height: 1;
+    }
+
+    .auth-copy,
+    .side-note {
+      color: var(--text-soft);
+      line-height: 1.65;
+    }
+
+    .auth-copy {
+      max-width: 660px;
+      margin: 18px 0 0;
+    }
+
+    .auth-switch {
+      margin: 22px 0 0;
+      color: var(--text-muted);
+      text-align: center;
+    }
+
+    .auth-switch a {
+      color: var(--brand-soft);
+      font-weight: 800;
+    }
+
+    .side-note {
+      margin: 24px 0 0;
+      padding-top: 20px;
+      border-top: 1px solid var(--border);
+      font-size: 14px;
+    }
+
+    .status-message {
+      margin: 0;
+    }
+  </style>
+</BaseLayout>

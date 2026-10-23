@@ -1,0 +1,327 @@
+
+
+.ink-defs {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+
+/*
+ * .sketch — двойная обводка «от руки»: основной штрих с фильтром #ink и второй, бледнее,
+ * со смещением. Рамки живут в псевдоэлементах, поэтому фильтр не трогает текст внутри.
+ */
+.sketch {
+  position: relative;
+  isolation: isolate;
+  --sketch-bg: transparent;
+  --sketch-w: 2px;
+  --sketch-r1: var(--wobble-a);
+  --sketch-r2: var(--wobble-b);
+}
+
+.sketch::before,
+.sketch::after {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  pointer-events: none;
+}
+
+.sketch::before {
+  inset: 0;
+  border: var(--sketch-w) solid var(--ink);
+  border-radius: var(--sketch-r1);
+  background: var(--sketch-bg);
+  filter: url(#ink);
+}
+
+.sketch::after {
+  inset: 3px -3px -2px 2px;
+  border: 1.2px solid var(--ink-soft);
+  border-radius: var(--sketch-r2);
+}
+
+
+.sketch-border {
+  position: absolute;
+  inset: -4px;
+  width: calc(100% + 8px);
+  height: calc(100% + 8px);
+  overflow: visible;
+  pointer-events: none;
+}
+
+.sketch-border path {
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 1.8;
+  stroke-linecap: round;
+}
+
+
+
+.card {
+  --sketch-bg: rgba(252, 251, 246, 0.86);
+  --sketch-r1: var(--wobble-box-a);
+  --sketch-r2: var(--wobble-box-b);
+  padding: 18px 20px 20px;
+}
+
+.card > h2,
+.card > h3 {
+  margin-bottom: 10px;
+}
+
+
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 4px 20px 6px;
+  border: 0;
+  background: none;
+  font-size: var(--fs-m);
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  white-space: nowrap;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  --sketch-bg: rgba(252, 251, 246, 0.7);
+  transition: transform 80ms ease;
+}
+
+.btn:hover:not(:disabled) {
+  --sketch-bg: var(--ink-wash);
+}
+
+.btn:active:not(:disabled) {
+  transform: translate(1px, 1.5px);
+}
+
+.btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+
+.btn-primary {
+  --sketch-w: 2.6px;
+  --sketch-bg: rgba(63, 92, 174, 0.13);
+}
+
+.btn-primary:hover:not(:disabled) {
+  --sketch-bg: rgba(63, 92, 174, 0.22);
+}
+
+.btn-ghost {
+  min-height: 40px;
+  padding: 4px 10px;
+}
+
+.btn-ghost::before,
+.btn-ghost::after {
+  opacity: 0;
+}
+
+.btn-ghost:hover:not(:disabled)::before,
+.btn-ghost:focus-visible::before {
+  opacity: 1;
+}
+
+
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.field-label {
+  font-size: var(--fs-s);
+  font-weight: 600;
+  color: var(--ink-2);
+}
+
+.input-wrap {
+  display: block;
+  --sketch-bg: rgba(252, 251, 246, 0.9);
+  --sketch-r1: 6px 120px 8px 140px / 140px 8px 120px 6px;
+  --sketch-r2: 120px 6px 140px 8px / 8px 140px 6px 120px;
+}
+
+.input {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  padding: 4px 14px;
+  border: 0;
+  background: transparent;
+  font-size: var(--fs-m);
+  outline: none;
+}
+
+.input::placeholder {
+  color: var(--ink-soft);
+  opacity: 0.8;
+}
+
+.input-wrap:focus-within::before {
+  border-color: var(--ink-2);
+  --sketch-bg: rgba(255, 255, 255, 0.95);
+}
+
+
+
+.icon {
+  flex: none;
+  filter: url(#ink-fine);
+}
+
+
+
+.tabs {
+  display: flex;
+  gap: 18px;
+}
+
+.tab {
+  position: relative;
+  padding: 0 2px 4px;
+  border: 0;
+  background: none;
+  font-size: var(--fs-l);
+  font-weight: 700;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+
+.tab[aria-selected='true'] {
+  color: var(--ink);
+}
+
+.tab[aria-selected='true']::after {
+  content: '';
+  position: absolute;
+  left: -4px;
+  right: -6px;
+  bottom: 0;
+  height: 7px;
+  border-bottom: 2.2px solid var(--ink);
+  border-radius: 0 0 60% 40% / 0 0 100% 60%;
+  filter: url(#ink);
+}
+
+
+
+.note {
+  padding: 6px 12px 8px;
+  animation: fade-up 220ms ease-out;
+  --sketch-r1: 8px 90px 6px 110px / 110px 6px 90px 8px;
+  --sketch-r2: 90px 8px 110px 6px / 6px 110px 8px 90px;
+  --sketch-w: 1.6px;
+}
+
+.note-error {
+  color: var(--accent);
+  --sketch-bg: var(--accent-soft);
+}
+
+.note-error::before {
+  border-color: var(--accent);
+}
+
+.note-error::after {
+  border-color: rgba(210, 73, 42, 0.5);
+}
+
+.note-info {
+  --sketch-bg: var(--ink-wash);
+}
+
+
+
+.page-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  margin-bottom: calc(var(--sq) * 1);
+}
+
+.page-title {
+  flex: 1;
+  min-width: 0;
+}
+
+.page-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+
+.underline {
+  position: relative;
+  display: inline-block;
+}
+
+.underline::after {
+  content: '';
+  position: absolute;
+  left: -3%;
+  right: -5%;
+  bottom: -2px;
+  height: 10px;
+  border-bottom: 2.4px solid var(--ink-2);
+  border-radius: 0 0 50% 45% / 0 0 100% 70%;
+  transform: rotate(-0.8deg);
+  filter: url(#ink);
+}
+
+.spinner {
+  display: inline-block;
+  animation: ink-in 600ms ease-in-out infinite alternate;
+}
+
+.page-loader {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 60vh;
+}
+
+
+
+.invite {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.invite-code {
+  font-size: var(--fs-l);
+  padding: 0 6px;
+  border-bottom: 2px solid var(--accent);
+}
+
+.invite-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.invite-link {
+  flex: 1 1 180px;
+  min-width: 0;
+}
+
+.invite-link .input {
+  font-size: var(--fs-s);
+}

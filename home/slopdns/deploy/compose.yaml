@@ -1,0 +1,337 @@
+name: slopdns
+
+x-app: &app
+  user: "65532:65532"
+  restart: unless-stopped
+  security_opt:
+    - no-new-privileges:true
+
+x-job: &job
+  user: "65532:65532"
+  restart: "no"
+  security_opt:
+    - no-new-privileges:true
+
+x-health: &health
+  interval: 5s
+  timeout: 3s
+  retries: 6
+  start_period: 60s
+  start_interval: 1s
+
+x-zone-env: &zone-env
+  USER_ZONE_SUFFIX: ${USER_ZONE_SUFFIX:-slop}
+  ZONE_NAMESERVERS: ${ZONE_NAMESERVERS:-ns1.slopdns.slop.}
+  SOA_MNAME: ${SOA_MNAME:-ns1.slopdns.slop.}
+  SOA_RNAME: ${SOA_RNAME:-hostmaster.slopdns.slop.}
+  RESERVED_ZONE_NAMES: ${RESERVED_ZONE_NAMES:-}
+
+x-pki-done: &pki-done
+  condition: service_completed_successfully
+
+x-postgres-healthy: &postgres-healthy
+  condition: service_healthy
+
+services:
+  pki-init:
+    build:
+      context: ..
+      dockerfile: tools/Dockerfile
+      target: pkigen
+    user: "65532:65532"
+    restart: "no"
+    network_mode: none
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      PKI_DIR: /pki
+      DNS_NODE_ID: dns1
+    volumes:
+      - pki:/pki
+
+  postgres:
+    image: postgres:17
+    restart: unless-stopped
+    shm_size: 128m
+    environment:
+      POSTGRES_DB: slopdns
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in deploy/.env}
+      SLOPDNS_IAM_OWNER_DB_PASSWORD: ${SLOPDNS_IAM_OWNER_DB_PASSWORD:?set SLOPDNS_IAM_OWNER_DB_PASSWORD in deploy/.env}
+      SLOPDNS_BACKEND_OWNER_DB_PASSWORD: ${SLOPDNS_BACKEND_OWNER_DB_PASSWORD:?set SLOPDNS_BACKEND_OWNER_DB_PASSWORD in deploy/.env}
+      SLOPDNS_IAM_DB_PASSWORD: ${SLOPDNS_IAM_DB_PASSWORD:?set SLOPDNS_IAM_DB_PASSWORD in deploy/.env}
+      SLOPDNS_BACKEND_DB_PASSWORD: ${SLOPDNS_BACKEND_DB_PASSWORD:?set SLOPDNS_BACKEND_DB_PASSWORD in deploy/.env}
+      SLOPDNS_SYNC_DB_PASSWORD: ${SLOPDNS_SYNC_DB_PASSWORD:?set SLOPDNS_SYNC_DB_PASSWORD in deploy/.env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD", "pg_isready", "-q", "-h", "127.0.0.1", "-U", "postgres", "-d", "slopdns"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+      start_period: 60s
+      start_interval: 1s
+    depends_on:
+      pki-init: *pki-done
+
+  iam-migrate:
+    <<: *job
+    build:
+      context: ..
+      dockerfile: web/iam/Dockerfile
+      target: runtime
+    command: ["migrate"]
+    environment:
+      DATABASE_URL: postgres://slopdns_iam_owner:${SLOPDNS_IAM_OWNER_DB_PASSWORD}@postgres:5432/slopdns?sslmode=disable
+    networks:
+      - internal
+    depends_on:
+      postgres: *postgres-healthy
+
+  backend-migrate:
+    <<: *job
+    build:
+      context: ..
+      dockerfile: web/backend/Dockerfile
+      target: runtime
+    command: ["migrate"]
+    environment:
+      DATABASE_URL: postgres://slopdns_backend_owner:${SLOPDNS_BACKEND_OWNER_DB_PASSWORD}@postgres:5432/slopdns?sslmode=disable
+    networks:
+      - internal
+    depends_on:
+      postgres: *postgres-healthy
+
+  backend-bootstrap:
+    <<: *job
+    build:
+      context: ..
+      dockerfile: web/backend/Dockerfile
+      target: runtime
+    command: ["bootstrap-infra"]
+    environment:
+      <<: *zone-env
+      DATABASE_URL: postgres://slopdns_backend:${SLOPDNS_BACKEND_DB_PASSWORD}@postgres:5432/slopdns?sslmode=disable
+      MIGRATE_ON_START: "false"
+      INFRA_NS_ADDRESS: ${INFRA_NS_ADDRESS:?set INFRA_NS_ADDRESS in deploy/.env}
+    networks:
+      - internal
+    depends_on:
+      postgres: *postgres-healthy
+      backend-migrate:
+        condition: service_completed_successfully
+
+  iam:
+    <<: *app
+    build:
+      context: ..
+      dockerfile: web/iam/Dockerfile
+      target: runtime
+    command: ["serve"]
+    environment:
+      DATABASE_URL: postgres://slopdns_iam:${SLOPDNS_IAM_DB_PASSWORD}@postgres:5432/slopdns?sslmode=disable
+      MIGRATE_ON_START: "false"
+      PKI_DIR: /pki
+      GRPC_ADDR: ":9090"
+      BACKEND_GRPC_ADDR: backend:9090
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}
+      ARGON2_MAX_CONCURRENCY: ${ARGON2_MAX_CONCURRENCY:-2}
+      ARGON2_QUEUE_TIMEOUT: ${ARGON2_QUEUE_TIMEOUT:-2s}
+    volumes:
+      - type: volume
+        source: pki
+        target: /pki
+        read_only: true
+        volume:
+          subpath: iam
+    networks:
+      - internal
+    healthcheck:
+      <<: *health
+      test: ["CMD", "iam", "healthcheck"]
+    depends_on:
+      pki-init: *pki-done
+      postgres: *postgres-healthy
+      iam-migrate:
+        condition: service_completed_successfully
+
+  backend:
+    <<: *app
+    build:
+      context: ..
+      dockerfile: web/backend/Dockerfile
+      target: runtime
+    command: ["serve"]
+    environment:
+      DATABASE_URL: postgres://slopdns_backend:${SLOPDNS_BACKEND_DB_PASSWORD}@postgres:5432/slopdns?sslmode=disable
+      MIGRATE_ON_START: "false"
+      PKI_DIR: /pki
+      GRPC_ADDR: ":9090"
+      IAM_GRPC_ADDR: iam:9090
+      <<: *zone-env
+      MAX_ZONES_PER_ORG: ${MAX_ZONES_PER_ORG:-50}
+      MAX_RECORDS_PER_ZONE: ${MAX_RECORDS_PER_ZONE:-1000}
+      MAX_ORGS_PER_USER: ${MAX_ORGS_PER_USER:-20}
+      MAX_PENDING_INVITATIONS_PER_ORG: ${MAX_PENDING_INVITATIONS_PER_ORG:-100}
+      MAX_ZONE_BYTES: ${MAX_ZONE_BYTES:-4194304}
+      AUTHZ_CACHE_SIZE: ${AUTHZ_CACHE_SIZE:-10000}
+      AUTHZ_CACHE_TTL: ${AUTHZ_CACHE_TTL:-5m}
+      CHANGE_LOG_RETENTION: ${CHANGE_LOG_RETENTION:-24h}
+    volumes:
+      - type: volume
+        source: pki
+        target: /pki
+        read_only: true
+        volume:
+          subpath: backend
+    networks:
+      - internal
+    healthcheck:
+      <<: *health
+      test: ["CMD", "backend", "healthcheck"]
+    depends_on:
+      pki-init: *pki-done
+      postgres: *postgres-healthy
+      backend-migrate:
+        condition: service_completed_successfully
+      backend-bootstrap:
+        condition: service_completed_successfully
+
+  dns-sync:
+    <<: *app
+    build:
+      context: ..
+      dockerfile: web/dnssync/Dockerfile
+      target: runtime
+    command: ["serve"]
+    environment:
+      DATABASE_URL: postgres://slopdns_sync:${SLOPDNS_SYNC_DB_PASSWORD}@postgres:5432/slopdns?sslmode=disable
+      PKI_DIR: /pki
+      DNS_NODE_IDS: dns1
+      GRPC_ADDR: ":9443"
+    volumes:
+      - type: volume
+        source: pki
+        target: /pki
+        read_only: true
+        volume:
+          subpath: dns-sync
+    networks:
+      - internal
+    healthcheck:
+      <<: *health
+      test: ["CMD", "dns-sync", "healthcheck"]
+    depends_on:
+      pki-init: *pki-done
+      postgres: *postgres-healthy
+      backend-migrate:
+        condition: service_completed_successfully
+      backend-bootstrap:
+        condition: service_completed_successfully
+
+  gateway:
+    <<: *app
+    build:
+      context: ..
+      dockerfile: web/gateway/Dockerfile
+      target: runtime
+    command: ["serve"]
+    environment:
+      PKI_DIR: /pki
+      IAM_GRPC_ADDR: iam:9090
+      IAM_HTTP_URL: http://iam:8080
+      BACKEND_HTTP_URL: http://backend:8080
+      RATE_LIMIT_RPS: ${RATE_LIMIT_RPS:-50}
+      RATE_LIMIT_BURST: ${RATE_LIMIT_BURST:-100}
+      MAX_BODY_BYTES: ${MAX_BODY_BYTES:-1048576}
+    volumes:
+      - type: volume
+        source: pki
+        target: /pki
+        read_only: true
+        volume:
+          subpath: gateway
+    networks:
+      - internal
+    healthcheck:
+      <<: *health
+      test: ["CMD", "gateway", "healthcheck"]
+    depends_on:
+      pki-init: *pki-done
+      iam:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ..
+      dockerfile: web/frontend/Dockerfile
+      target: runtime
+    user: "101:101"
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    ports:
+      - "${HTTP_PORT:-80}:8080"
+    networks:
+      public:
+        gw_priority: 1
+      internal: {}
+    healthcheck:
+      <<: *health
+      start_period: 20s
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/healthz"]
+
+  dns-server:
+    <<: *app
+    build:
+      context: ..
+      dockerfile: dns-server/Dockerfile
+      target: runtime
+      args:
+        DEBIAN_MIRROR: ${DEBIAN_MIRROR:-http://mirror.yandex.ru}
+    command: ["serve"]
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    environment:
+      PKI_DIR: /pki
+      DNS_NODE_ID: dns1
+      DNS_PORT: "53"
+      HEALTH_ADDR: ":8080"
+      SYNC_ADDR: dns-sync:9443
+      SYNC_LEASE: ${SYNC_LEASE:-300s}
+      LOG_LEVEL: ${DNS_LOG_LEVEL:-info}
+    volumes:
+      - type: volume
+        source: pki
+        target: /pki
+        read_only: true
+        volume:
+          subpath: dns-server
+    ports:
+      - "${DNS_BIND_IP:-0.0.0.0}:${DNS_HOST_PORT:-8053}:53/udp"
+      - "${DNS_BIND_IP:-0.0.0.0}:${DNS_HOST_PORT:-8053}:53/tcp"
+    networks:
+      public:
+        gw_priority: 1
+      internal: {}
+    healthcheck:
+      <<: *health
+      test: ["CMD", "dns-server", "healthcheck"]
+    depends_on:
+      pki-init: *pki-done
+      dns-sync:
+        condition: service_healthy
+
+networks:
+  public: {}
+  internal:
+    internal: true
+
+volumes:
+  pgdata: {}
+  pki: {}

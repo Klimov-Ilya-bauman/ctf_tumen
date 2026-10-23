@@ -1,0 +1,21 @@
+---
+import { pageCaptions } from '../data/interface-copy';
+interface Props { page: string }
+const { page } = Astro.props;
+const caption = pageCaptions[page];
+---
+{caption && <p class="interface-caption" data-interface-caption={page}>
+  <span data-caption-text>{caption.text}</span>
+  {caption.stack && <small class="interface-stack">{caption.stack}</small>}
+</p>}
+
+<script>
+  import { pageCaptions } from '../data/interface-copy';
+  import { resolveCaption } from '../lib/interface-copy';
+
+  document.querySelectorAll<HTMLElement>('[data-interface-caption]').forEach(node => {
+    const copy = pageCaptions[node.dataset.interfaceCaption!];
+    const text = node.querySelector<HTMLElement>('[data-caption-text]');
+    if (copy && text) text.textContent = resolveCaption(copy).text;
+  });
+</script>

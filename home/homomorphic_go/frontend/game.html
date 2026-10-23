@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Game · Homomorphic Go</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body data-page="game">
+<header class="topbar">
+  <a class="brand" href="lobby.html">Homomorphic Go</a>
+  <span class="spacer"></span>
+  <a id="back-link" href="lobby.html">Back to lobby</a>
+</header>
+<main class="game-layout">
+  <div class="board-wrap">
+    <svg id="board" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 760"></svg>
+  </div>
+  <aside class="panel side">
+    <h2>Game <span id="game-id" data-game-id=""></span></h2>
+    <p id="players" class="players"></p>
+    <p id="you" class="you"></p>
+    <p id="status" class="status">Loading…</p>
+    <p id="move-alert" class="move-alert" role="alert" aria-live="assertive" hidden></p>
+    <div class="chat">
+      <div id="chat-log" class="chat-log"></div>
+      <form id="chat-form" class="chat-form">
+        <input id="chat-input" type="text" maxlength="500" placeholder="Message" autocomplete="off">
+        <button id="chat-send" type="submit">Send</button>
+      </form>
+    </div>
+  </aside>
+</main>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,3797 @@
+openapi: 3.1.0
+info:
+  title: SlopDNS public API
+  version: 1.0.0
+  contact:
+    name: SlopDNS team
+  description: |-
+    Public REST/JSON API of SlopDNS, served by the API gateway under /api/v1 and used by both the SPA and scripts.
+
+    Authentication: session cookie slopdns_session (UI) or Authorization: Bearer with a personal token (sdpat_...) or service account token (sdsat_...). Cookie-authenticated mutating requests must send X-SlopDNS-CSRF: 1. Service accounts work only with tokens and cannot use session-only endpoints (auth/totp, users/me/tokens, createOrg).
+
+    Validation: request bodies are strict JSON (unknown fields -> 400). Every field constraint below is enforced by the server; violations return 422 with error.field. Objects outside the caller's organizations are reported as 404, insufficient role on a visible object as 403.
+
+    Lists use limit/offset pagination and return {items, total, limit, offset}.
+servers:
+- url: /api/v1
+security:
+- sessionCookie: []
+- bearerToken: []
+tags:
+- name: auth
+  description: Registration, login, TOTP.
+- name: tokens
+  description: Personal API tokens.
+- name: orgs
+  description: Organizations and members.
+- name: invitations
+  description: Organization invitations.
+- name: role-bindings
+  description: Roles on organizations, zones and service accounts.
+- name: service-accounts
+  description: Service accounts and their tokens.
+- name: zones
+  description: DNS zones.
+- name: records
+  description: DNS records.
+- name: zone-transfers
+  description: Transferring zones between users and organizations.
+- name: health
+  description: Liveness and readiness.
+paths:
+  /auth/register:
+    post:
+      operationId: register
+      summary: Register a user
+      tags:
+      - auth
+      description: Creates the user and, through Backend EnsureDefaultOrg, the organization named <username>-org owned by the user (organization names are display labels and need not be unique).
+        Does not log in.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: Registered.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+      security: []
+  /auth/login:
+    post:
+      operationId: login
+      summary: Log in with username and password
+      tags:
+      - auth
+      description: 'Wrong credentials return 401 invalid_credentials, identical for unknown users. Wrong passwords are not counted per user and never lock the account. 429 rate_limited (with Retry-After) is returned only when the global password hashing pool of IAM stays saturated for ARGON2_QUEUE_TIMEOUT.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Logged in or second factor required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+          headers:
+            Set-Cookie:
+              description: slopdns_session=<sdses token>; HttpOnly; SameSite=Strict; Path=/ (plus Secure when SESSION_COOKIE_SECURE=true).
+              schema:
+                type: string
+                maxLength: 512
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+      security: []
+  /auth/login/totp:
+    post:
+      operationId: loginTotp
+      summary: Second login step with a TOTP or recovery code
+      tags:
+      - auth
+      description: 'Consumes the mfa_token. A used recovery code is marked and never accepted again. One mfa_token allows at most 5 second-factor attempts: after 5 wrong codes (TOTP or recovery) it is invalid (401 mfa_invalid, even for a correct code) and the user starts again with POST /auth/login. This is not an account lockout.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginTotpRequest'
+      responses:
+        '200':
+          description: Logged in.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginSuccess'
+          headers:
+            Set-Cookie:
+              description: slopdns_session=<sdses token>; HttpOnly; SameSite=Strict; Path=/ (plus Secure when SESSION_COOKIE_SECURE=true).
+              schema:
+                type: string
+                maxLength: 512
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+      security: []
+  /auth/logout:
+    post:
+      operationId: logout
+      summary: Log out (revoke the current session)
+      tags:
+      - auth
+      description: Revokes the session and clears the cookie. With a bearer token it is a no-op returning 204.
+      parameters:
+      - $ref: '#/components/parameters/csrf'
+      responses:
+        '204':
+          description: Logged out.
+          headers:
+            Set-Cookie:
+              description: slopdns_session=<sdses token>; HttpOnly; SameSite=Strict; Path=/ (plus Secure when SESSION_COOKIE_SECURE=true).
+              schema:
+                type: string
+                maxLength: 512
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /auth/me:
+    get:
+      operationId: getMe
+      summary: Current principal
+      tags:
+      - auth
+      description: Current principal.
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Me'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /auth/totp/setup:
+    post:
+      operationId: totpSetup
+      summary: Start TOTP enrollment
+      tags:
+      - auth
+      description: Generates and stores a new pending secret (replacing a previous pending one). 409 if TOTP is already enabled. Users only.
+      parameters:
+      - $ref: '#/components/parameters/csrf'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TotpSetupResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /auth/totp/enable:
+    post:
+      operationId: totpEnable
+      summary: Confirm TOTP enrollment
+      tags:
+      - auth
+      description: Verifies a code for the pending secret, enables TOTP and issues 10 recovery codes (shown once). 409 if there is no pending secret or TOTP is already
+        enabled.
+      parameters:
+      - $ref: '#/components/parameters/csrf'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TotpEnableRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecoveryCodesResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /auth/totp/disable:
+    post:
+      operationId: totpDisable
+      summary: Disable TOTP
+      tags:
+      - auth
+      description: Requires the password and a valid TOTP code or recovery code. Deletes the secret and all recovery codes.
+      parameters:
+      - $ref: '#/components/parameters/csrf'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TotpDisableRequest'
+      responses:
+        '204':
+          $ref: '#/components/responses/NoContent'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /auth/totp/recovery-codes:
+    post:
+      operationId: regenerateRecoveryCodes
+      summary: Regenerate TOTP recovery codes
+      tags:
+      - auth
+      description: Requires the password and a valid TOTP code. Invalidates all previous recovery codes.
+      parameters:
+      - $ref: '#/components/parameters/csrf'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecoveryCodesRegenerateRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecoveryCodesResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /users/me/tokens:
+    get:
+      operationId: listMyTokens
+      summary: List my API tokens
+      tags:
+      - tokens
+      description: Active and expired (not revoked) personal API tokens of the calling user. Users only.
+      parameters:
+      - $ref: '#/components/parameters/limit'
+      - $ref: '#/components/parameters/offset'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiTokenPage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    post:
+      operationId: createMyToken
+      summary: Create a personal API token
+      tags:
+      - tokens
+      description: 'The token acts on behalf of the user with the user''s current permissions. Can only be created with a session (403 for API tokens and service accounts). Requires totp_code when TOTP is enabled (401 mfa_invalid when missing or wrong). Each session allows at most 5 wrong totp_code values across token creations: the 5th wrong code revokes the session (log in again); the account is not locked.'
+      parameters:
+      - $ref: '#/components/parameters/csrf'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserTokenCreate'
+      responses:
+        '201':
+          description: Created. The token is shown only once.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreatedApiToken'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /users/me/tokens/{token_id}:
+    delete:
+      operationId: revokeMyToken
+      summary: Revoke a personal API token
+      tags:
+      - tokens
+      description: Takes effect on the next request.
+      parameters:
+      - $ref: '#/components/parameters/token_id'
+      - $ref: '#/components/parameters/csrf'
+      responses:
+        '204':
+          $ref: '#/components/responses/NoContent'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /orgs:
+    get:
+      operationId: listOrgs
+      summary: List organizations I am a member of
+      tags:
+      - orgs
+      description: List organizations I am a member of.
+      parameters:
+      - $ref: '#/components/parameters/limit'
+      - $ref: '#/components/parameters/offset'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrgPage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    post:
+      operationId: createOrg
+      summary: Create an organization
+      tags:
+      - orgs
+      description: Create an organization. At most MAX_ORGS_PER_USER (default 20) organizations created by the caller may exist, including the default organization
+        (422 quota_exceeded, field=name).
+      parameters:
+      - $ref: '#/components/parameters/csrf'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrgCreate'
+      responses:
+        '201':
+          description: Created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Org'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /orgs/{org_id}:
+    get:
+      operationId: getOrg
+      summary: Get an organization
+      tags:
+      - orgs
+      description: Get an organization.
+      parameters:
+      - $ref: '#/components/parameters/org_id'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Org'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    patch:
+      operationId: updateOrg
+      summary: Rename an organization
+      tags:
+      - orgs
+      description: Requires admin on the organization.
+      parameters:
+      - $ref: '#/components/parameters/org_id'
+      - $ref: '#/components/parameters/csrf'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrgUpdate'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Org'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    delete:
+      operationId: deleteOrg
+      summary: Delete an organization
+      tags:
+      - orgs
+      description: Owner only. The organization must not contain zones (409). Its service accounts, tokens, role bindings and pending invitations are removed.
+      parameters:
+      - $ref: '#/components/parameters/org_id'
+      - $ref: '#/components/parameters/csrf'
+      responses:
+        '204':
+          $ref: '#/components/responses/NoContent'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /orgs/{org_id}/members:
+    get:
+      operationId: listOrgMembers
+      summary: List organization members
+      tags:
+      - orgs
+      description: Requires reader on the organization. A member is any principal with at least one role binding in the organization.
+      parameters:
+      - $ref: '#/components/parameters/org_id'
+      - $ref: '#/components/parameters/limit'
+      - $ref: '#/components/parameters/offset'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MemberPage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /orgs/{org_id}/members/{user_id}:
+    delete:
+      operationId: removeOrgMember
+      summary: Remove a user from an organization
+      tags:
+      - orgs
+      description: Requires admin on the organization. Revokes all bindings of the user in the organization. The owner cannot be removed (403). A user may remove
+        themselves (leave), except the owner.
+      parameters:
+      - $ref: '#/components/parameters/org_id'
+      - $ref: '#/components/parameters/user_id'
+      - $ref: '#/components/parameters/csrf'
+      responses:
+        '204':
+          $ref: '#/components/responses/NoContent'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /orgs/{org_id}/transfer-ownership:
+    post:
+      operationId: transferOrgOwnership
+      summary: Transfer organization ownership
+      tags:
+      - orgs
+      description: Owner only. The target must be a user member of the organization (422). The previous owner becomes admin.
+      parameters:
+      - $ref: '#/components/parameters/org_id'
+      - $ref: '#/components/parameters/csrf'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransferOwnershipRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Org'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /orgs/{org_id}/invitations:
+    get:
+      operationId: listOrgInvitations
+      summary: List invitations of an organization
+      tags:
+      - invitations
+      description: Requires admin on the organization.
+      parameters:
+      - $ref: '#/components/parameters/org_id'
+      - $ref: '#/components/parameters/limit'
+      - $ref: '#/components/parameters/offset'
+      - $ref: '#/components/parameters/invitation_status'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvitationPage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    post:
+      operationId: createInvitation
+      summary: Invite a user to an organization
+      tags:
+      - invitations
+      description: Requires admin on the organization. The invitee must be a registered user who is not yet an organization-level member (409) and has no pending
+        invitation to this organization (409). Expires after 7 days. At most MAX_PENDING_INVITATIONS_PER_ORG (default 100) pending invitations per organization
+        (422 quota_exceeded, field=org_id).
+      parameters:
+      - $ref: '#/components/parameters/org_id'
+      - $ref: '#/components/parameters/csrf'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InvitationCreate'
+      responses:
+        '201':
+          description: Created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Invitation'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /invitations:
+    get:
+      operationId: listMyInvitations
+      summary: List invitations addressed to me
+      tags:
+      - invitations
+      description: List invitations addressed to me.
+      parameters:
+      - $ref: '#/components/parameters/invitation_status'
+      - $ref: '#/components/parameters/limit'
+      - $ref: '#/components/parameters/offset'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvitationPage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /invitations/{invitation_id}/accept:
+    post:
+      operationId: acceptInvitation
+      summary: Accept an invitation
+      tags:
+      - invitations
+      description: Invitee only. Grants the invited role on the organization. 409 if the invitation is not pending (accepted, declined, revoked or expired).
+      parameters:
+      - $ref: '#/components/parameters/invitation_id'
+      - $ref: '#/components/parameters/csrf'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Invitation'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /invitations/{invitation_id}/decline:
+    post:
+      operationId: declineInvitation
+      summary: Decline an invitation
+      tags:
+      - invitations
+      description: Invitee only. 409 if not pending.
+      parameters:
+      - $ref: '#/components/parameters/invitation_id'
+      - $ref: '#/components/parameters/csrf'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Invitation'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /invitations/{invitation_id}/revoke:
+    post:
+      operationId: revokeInvitation
+      summary: Revoke an invitation
+      tags:
+      - invitations
+      description: Requires admin on the organization. 409 if not pending.
+      parameters:
+      - $ref: '#/components/parameters/invitation_id'
+      - $ref: '#/components/parameters/csrf'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Invitation'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /role-bindings:
+    get:
+      operationId: listRoleBindings
+      summary: List role bindings
+      tags:
+      - role-bindings
+      description: Either resource_type with resource_id (bindings on that object, requires reader on it) or org_id (all bindings in the organization, requires reader
+        on it) must be given (422 otherwise).
+      parameters:
+      - $ref: '#/components/parameters/resource_type_filter'
+      - $ref: '#/components/parameters/resource_id_filter'
+      - $ref: '#/components/parameters/org_id_filter'
+      - $ref: '#/components/parameters/limit'
+      - $ref: '#/components/parameters/offset'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoleBindingPage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    post:
+      operationId: createRoleBinding
+      summary: Grant a role
+      tags:
+      - role-bindings
+      description: Grant a role.
+      parameters:
+      - $ref: '#/components/parameters/csrf'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RoleBindingCreate'
+      responses:
+        '201':
+          description: Created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoleBinding'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /role-bindings/{binding_id}:
+    patch:
+      operationId: updateRoleBinding
+      summary: Change a granted role
+      tags:
+      - role-bindings
+      description: Requires admin on the resource; same limits as granting.
+      parameters:
+      - $ref: '#/components/parameters/binding_id'
+      - $ref: '#/components/parameters/csrf'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RoleBindingUpdate'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoleBinding'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    delete:
+      operationId: deleteRoleBinding
+      summary: Revoke a role
+      tags:
+      - role-bindings
+      description: Requires admin on the resource. The owner binding cannot be revoked (403).
+      parameters:
+      - $ref: '#/components/parameters/binding_id'
+      - $ref: '#/components/parameters/csrf'
+      responses:
+        '204':
+          $ref: '#/components/responses/NoContent'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /service-accounts:
+    get:
+      operationId: listServiceAccounts
+      summary: List service accounts of an organization
+      tags:
+      - service-accounts
+      description: Returns the service accounts the caller can read.
+      parameters:
+      - $ref: '#/components/parameters/org_id_required'
+      - $ref: '#/components/parameters/limit'
+      - $ref: '#/components/parameters/offset'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServiceAccountPage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    post:
+      operationId: createServiceAccount
+      summary: Create a service account
+      tags:
+      - service-accounts
+      description: Create a service account.
+      parameters:
+      - $ref: '#/components/parameters/csrf'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ServiceAccountCreate'
+      responses:
+        '201':
+          description: Created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServiceAccount'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /service-accounts/{service_account_id}:
+    get:
+      operationId: getServiceAccount
+      summary: Get a service account
+      tags:
+      - service-accounts
+      description: Get a service account.
+      parameters:
+      - $ref: '#/components/parameters/service_account_id'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServiceAccount'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    patch:
+      operationId: updateServiceAccount
+      summary: Update a service account
+      tags:
+      - service-accounts
+      description: Update a service account.
+      parameters:
+      - $ref: '#/components/parameters/service_account_id'
+      - $ref: '#/components/parameters/csrf'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ServiceAccountUpdate'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServiceAccount'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    delete:
+      operationId: deleteServiceAccount
+      summary: Delete a service account
+      tags:
+      - service-accounts
+      description: Requires admin on the service account. Revokes all its tokens and bindings.
+      parameters:
+      - $ref: '#/components/parameters/service_account_id'
+      - $ref: '#/components/parameters/csrf'
+      responses:
+        '204':
+          $ref: '#/components/responses/NoContent'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /service-accounts/{service_account_id}/tokens:
+    get:
+      operationId: listServiceAccountTokens
+      summary: List tokens of a service account
+      tags:
+      - service-accounts
+      description: Requires admin on the service account.
+      parameters:
+      - $ref: '#/components/parameters/service_account_id'
+      - $ref: '#/components/parameters/limit'
+      - $ref: '#/components/parameters/offset'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiTokenPage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    post:
+      operationId: createServiceAccountToken
+      summary: Create a service account token
+      tags:
+      - service-accounts
+      description: Requires admin on the service account. A service account may have several tokens (rotation).
+      parameters:
+      - $ref: '#/components/parameters/service_account_id'
+      - $ref: '#/components/parameters/csrf'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ServiceAccountTokenCreate'
+      responses:
+        '201':
+          description: Created. The token is shown only once.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreatedApiToken'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /service-accounts/{service_account_id}/tokens/{token_id}:
+    delete:
+      operationId: revokeServiceAccountToken
+      summary: Revoke a service account token
+      tags:
+      - service-accounts
+      description: Requires admin on the service account.
+      parameters:
+      - $ref: '#/components/parameters/service_account_id'
+      - $ref: '#/components/parameters/token_id'
+      - $ref: '#/components/parameters/csrf'
+      responses:
+        '204':
+          $ref: '#/components/responses/NoContent'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /zones:
+    get:
+      operationId: listZones
+      summary: List zones visible to me
+      tags:
+      - zones
+      description: Zones where the caller's effective role is at least reader.
+      parameters:
+      - $ref: '#/components/parameters/org_id_filter'
+      - $ref: '#/components/parameters/zone_name_filter'
+      - $ref: '#/components/parameters/limit'
+      - $ref: '#/components/parameters/offset'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ZonePage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    post:
+      operationId: createZone
+      summary: Create a zone
+      tags:
+      - zones
+      description: 'Create a zone. Names of the service infrastructure (SOA mname/rname, nameservers, RESERVED_ZONE_NAMES), names below them and their parents
+        below USER_ZONE_SUFFIX are reserved (422, field=name). A zone may be nested inside, or contain, only zones of the same organization (409 otherwise). At most
+        MAX_ZONES_PER_ORG (default 50) zones per organization (422 quota_exceeded, field=org_id).'
+      parameters:
+      - $ref: '#/components/parameters/csrf'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ZoneCreate'
+      responses:
+        '201':
+          description: Created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Zone'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /zones/{zone_id}:
+    get:
+      operationId: getZone
+      summary: Get a zone
+      tags:
+      - zones
+      description: Get a zone.
+      parameters:
+      - $ref: '#/components/parameters/zone_id'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Zone'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    patch:
+      operationId: updateZone
+      summary: Update zone settings (default TTL, SOA)
+      tags:
+      - zones
+      description: Requires editor on the zone. Increments the SOA serial.
+      parameters:
+      - $ref: '#/components/parameters/zone_id'
+      - $ref: '#/components/parameters/csrf'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ZoneUpdate'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Zone'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    delete:
+      operationId: deleteZone
+      summary: Delete a zone
+      tags:
+      - zones
+      description: Requires admin on the zone. Deletes all records, cancels pending transfers and removes zone-level role bindings. The DNS server stops serving it
+        immediately.
+      parameters:
+      - $ref: '#/components/parameters/zone_id'
+      - $ref: '#/components/parameters/csrf'
+      responses:
+        '204':
+          $ref: '#/components/responses/NoContent'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /zones/{zone_id}/transfer:
+    post:
+      operationId: createZoneTransfer
+      summary: Offer a zone to another user
+      tags:
+      - zone-transfers
+      description: Requires admin on the zone. One pending transfer per zone (409). Expires after 7 days.
+      parameters:
+      - $ref: '#/components/parameters/zone_id'
+      - $ref: '#/components/parameters/csrf'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ZoneTransferCreate'
+      responses:
+        '201':
+          description: Created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ZoneTransfer'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /zones/{zone_id}/records:
+    get:
+      operationId: listRecords
+      summary: List records of a zone
+      tags:
+      - records
+      description: Requires reader on the zone. Sorted by name, type, id. SOA is not listed (see zone soa).
+      parameters:
+      - $ref: '#/components/parameters/zone_id'
+      - $ref: '#/components/parameters/record_name_filter'
+      - $ref: '#/components/parameters/record_type_filter'
+      - $ref: '#/components/parameters/limit'
+      - $ref: '#/components/parameters/offset'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecordPage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    post:
+      operationId: createRecord
+      summary: Create a record
+      tags:
+      - records
+      description: Requires editor on the zone. Increments the SOA serial; the DNS server sees the change immediately. At most MAX_RECORDS_PER_ZONE (default
+        1000) records per zone, including the apex NS records (422 quota_exceeded, field=zone_id), and at most MAX_ZONE_BYTES (default 4 MiB) of
+        uncompressed record wire data per zone (422 quota_exceeded, field=data).
+      parameters:
+      - $ref: '#/components/parameters/zone_id'
+      - $ref: '#/components/parameters/csrf'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecordInput'
+      responses:
+        '201':
+          description: Created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Record'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /records/{record_id}:
+    get:
+      operationId: getRecord
+      summary: Get a record
+      tags:
+      - records
+      description: Get a record.
+      parameters:
+      - $ref: '#/components/parameters/record_id'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Record'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    put:
+      operationId: replaceRecord
+      summary: Replace a record
+      tags:
+      - records
+      description: Requires editor on the zone. Full replacement, including name and type. The zone size limit MAX_ZONE_BYTES applies (422 quota_exceeded,
+        field=data).
+      parameters:
+      - $ref: '#/components/parameters/record_id'
+      - $ref: '#/components/parameters/csrf'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecordInput'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Record'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    delete:
+      operationId: deleteRecord
+      summary: Delete a record
+      tags:
+      - records
+      description: Requires editor on the zone. Deleting the last apex NS record is rejected (422).
+      parameters:
+      - $ref: '#/components/parameters/record_id'
+      - $ref: '#/components/parameters/csrf'
+      responses:
+        '204':
+          $ref: '#/components/responses/NoContent'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /zone-transfers:
+    get:
+      operationId: listZoneTransfers
+      summary: List zone transfers
+      tags:
+      - zone-transfers
+      description: List zone transfers.
+      parameters:
+      - $ref: '#/components/parameters/transfer_direction'
+      - $ref: '#/components/parameters/transfer_status'
+      - $ref: '#/components/parameters/limit'
+      - $ref: '#/components/parameters/offset'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ZoneTransferPage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /zone-transfers/{transfer_id}:
+    get:
+      operationId: getZoneTransfer
+      summary: Get a zone transfer
+      tags:
+      - zone-transfers
+      description: Get a zone transfer.
+      parameters:
+      - $ref: '#/components/parameters/transfer_id'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ZoneTransfer'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /zone-transfers/{transfer_id}/accept:
+    post:
+      operationId: acceptZoneTransfer
+      summary: Accept a zone transfer
+      tags:
+      - zone-transfers
+      description: Recipient only. Moves the zone to target_org_id, removes zone-level bindings of the old organization and grants the recipient admin on the zone.
+        409 if not pending, or if the zone would end up nested with a zone of another organization. 422 quota_exceeded (field=target_org_id) if the target organization
+        already has MAX_ZONES_PER_ORG zones.
+      parameters:
+      - $ref: '#/components/parameters/transfer_id'
+      - $ref: '#/components/parameters/csrf'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ZoneTransferAccept'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ZoneTransfer'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /zone-transfers/{transfer_id}/decline:
+    post:
+      operationId: declineZoneTransfer
+      summary: Decline a zone transfer
+      tags:
+      - zone-transfers
+      description: Recipient only. 409 if not pending.
+      parameters:
+      - $ref: '#/components/parameters/transfer_id'
+      - $ref: '#/components/parameters/csrf'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ZoneTransfer'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /zone-transfers/{transfer_id}/cancel:
+    post:
+      operationId: cancelZoneTransfer
+      summary: Cancel a zone transfer
+      tags:
+      - zone-transfers
+      description: Requires admin on the zone. 409 if not pending.
+      parameters:
+      - $ref: '#/components/parameters/transfer_id'
+      - $ref: '#/components/parameters/csrf'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ZoneTransfer'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /healthz:
+    servers:
+    - url: /
+      description: Health endpoints are served at the root of every service, outside /api/v1.
+    get:
+      operationId: healthz
+      summary: Liveness
+      tags:
+      - health
+      security: []
+      responses:
+        '200':
+          description: Healthy.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+      description: Liveness without external dependencies.
+  /readyz:
+    servers:
+    - url: /
+      description: Health endpoints are served at the root of every service, outside /api/v1.
+    get:
+      operationId: readyz
+      summary: Readiness
+      tags:
+      - health
+      security: []
+      responses:
+        '200':
+          description: Healthy.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+        '503':
+          description: Not ready.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+      description: Readiness including dependencies.
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: slopdns_session
+      description: 'Session token sdses_..., set by login. 12 h sliding, 7 days absolute. Mutating requests require X-SlopDNS-CSRF: 1.'
+    bearerToken:
+      type: http
+      scheme: bearer
+      bearerFormat: sdpat_<id>_<secret> or sdsat_<id>_<secret>
+      description: Personal API token or service account token.
+  parameters:
+    org_id:
+      name: org_id
+      in: path
+      required: true
+      description: Organization id.
+      schema:
+        $ref: '#/components/schemas/Uuid'
+    zone_id:
+      name: zone_id
+      in: path
+      required: true
+      description: Zone id.
+      schema:
+        $ref: '#/components/schemas/Uuid'
+    record_id:
+      name: record_id
+      in: path
+      required: true
+      description: Record id.
+      schema:
+        $ref: '#/components/schemas/Uuid'
+    invitation_id:
+      name: invitation_id
+      in: path
+      required: true
+      description: Invitation id.
+      schema:
+        $ref: '#/components/schemas/Uuid'
+    transfer_id:
+      name: transfer_id
+      in: path
+      required: true
+      description: Zone transfer id.
+      schema:
+        $ref: '#/components/schemas/Uuid'
+    service_account_id:
+      name: service_account_id
+      in: path
+      required: true
+      description: Service account id.
+      schema:
+        $ref: '#/components/schemas/Uuid'
+    token_id:
+      name: token_id
+      in: path
+      required: true
+      description: API token id.
+      schema:
+        $ref: '#/components/schemas/Uuid'
+    binding_id:
+      name: binding_id
+      in: path
+      required: true
+      description: Role binding id.
+      schema:
+        $ref: '#/components/schemas/Uuid'
+    user_id:
+      name: user_id
+      in: path
+      required: true
+      description: User id.
+      schema:
+        $ref: '#/components/schemas/Uuid'
+    limit:
+      name: limit
+      in: query
+      required: false
+      description: Page size.
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 500
+        default: 100
+    offset:
+      name: offset
+      in: query
+      required: false
+      description: Number of items to skip.
+      schema:
+        type: integer
+        minimum: 0
+        maximum: 1000000
+        default: 0
+    csrf:
+      name: X-SlopDNS-CSRF
+      in: header
+      required: false
+      description: Must be exactly 1 on every mutating request authenticated with the session cookie (403 csrf_required otherwise). Not needed with a bearer token.
+      schema:
+        type: string
+        const: '1'
+    org_id_filter:
+      name: org_id
+      in: query
+      required: false
+      description: Restrict to one organization.
+      schema:
+        $ref: '#/components/schemas/Uuid'
+    invitation_status:
+      name: status
+      in: query
+      required: false
+      description: Filter by status.
+      schema:
+        $ref: '#/components/schemas/InvitationStatus'
+    resource_type_filter:
+      name: resource_type
+      in: query
+      required: false
+      description: Resource type; must be combined with resource_id.
+      schema:
+        $ref: '#/components/schemas/ResourceType'
+    resource_id_filter:
+      name: resource_id
+      in: query
+      required: false
+      description: Resource id; must be combined with resource_type.
+      schema:
+        $ref: '#/components/schemas/Uuid'
+    org_id_required:
+      name: org_id
+      in: query
+      required: true
+      description: Organization id.
+      schema:
+        $ref: '#/components/schemas/Uuid'
+    zone_name_filter:
+      name: name
+      in: query
+      required: false
+      description: Substring of the zone name.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 254
+        pattern: ^[^\s\\]+$
+    record_name_filter:
+      name: name
+      in: query
+      required: false
+      description: Owner name (same syntax as OwnerName).
+      schema:
+        $ref: '#/components/schemas/OwnerName'
+    record_type_filter:
+      name: type
+      in: query
+      required: false
+      description: Type mnemonic or TYPEnnn.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 10
+        pattern: ^([A-Z]{1,10}|TYPE[1-9][0-9]{0,4})$
+    transfer_direction:
+      name: direction
+      in: query
+      required: false
+      description: 'incoming: addressed to me. outgoing: zones I administer that are offered to others. Default: both.'
+      schema:
+        type: string
+        enum:
+        - incoming
+        - outgoing
+    transfer_status:
+      name: status
+      in: query
+      required: false
+      description: Filter by status.
+      schema:
+        $ref: '#/components/schemas/ZoneTransferStatus'
+  responses:
+    BadRequest:
+      description: 'Malformed request: invalid JSON, unknown field, wrong content type, body too large (bad_request).'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Unauthorized:
+      description: Missing, invalid, expired or revoked credentials (unauthenticated, invalid_credentials, mfa_invalid).
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Forbidden:
+      description: Authenticated but not permitted (forbidden, csrf_required).
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotFound:
+      description: Object does not exist or is not visible to the caller (not_found).
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Conflict:
+      description: Uniqueness or state conflict (conflict).
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Unprocessable:
+      description: A field, path parameter or query parameter violates a constraint (validation_failed, see error.field), or a configured quota is exceeded (quota_exceeded, see error.field).
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    TooManyRequests:
+      description: Rate limit exceeded (per-principal limit of the gateway) or the IAM password hashing pool is saturated (rate_limited). Failed logins never cause 429.
+      headers:
+        Retry-After:
+          description: Seconds to wait.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 86400
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    ServiceUnavailable:
+      description: A required internal dependency is unavailable, retry later (service_unavailable).
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NoContent:
+      description: Done.
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              enum:
+              - bad_request
+              - unauthenticated
+              - invalid_credentials
+              - mfa_invalid
+              - csrf_required
+              - forbidden
+              - not_found
+              - conflict
+              - validation_failed
+              - quota_exceeded
+              - rate_limited
+              - internal_error
+              - service_unavailable
+              description: 'Machine-readable error code. bad_request: malformed JSON, unknown fields, wrong content type (400). unauthenticated: missing, invalid,
+                expired or revoked token (401). invalid_credentials: wrong username/password (401). mfa_invalid: wrong or reused TOTP/recovery code or expired mfa_token
+                (401). csrf_required: cookie-authenticated mutating request without X-SlopDNS-CSRF: 1 (403). forbidden: authenticated but not allowed (403). not_found:
+                object does not exist or is not visible to the caller (404). conflict: uniqueness or state conflict (409). validation_failed: a field violates a constraint
+                (422, see field). quota_exceeded: a configured limit is reached (422, see field): zones per organization, records per zone, zone size, organizations
+                created per user, pending invitations per organization. rate_limited (429).'
+            message:
+              type: string
+              minLength: 1
+              maxLength: 1024
+              description: Human-readable message (English).
+            field:
+              type: string
+              minLength: 1
+              maxLength: 256
+              pattern: ^[A-Za-z0-9_.\[\]-]+$
+              description: Dotted path of the offending request field for 422 errors, e.g. name, data.address, data.strings[2], soa.refresh. Query parameters are
+                reported by name.
+          required:
+          - code
+          - message
+          additionalProperties: false
+      required:
+      - error
+      additionalProperties: false
+      description: Uniform error envelope used by every non-2xx response.
+    Uuid:
+      type: string
+      format: uuid
+      pattern: ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$
+      description: UUIDv7 in lower-case canonical form.
+    Timestamp:
+      type: string
+      format: date-time
+      maxLength: 40
+      description: RFC 3339 timestamp, UTC.
+    Username:
+      type: string
+      minLength: 3
+      maxLength: 32
+      pattern: ^[a-z0-9][a-z0-9-]{2,31}$
+      description: '3-32 characters: lower-case ASCII letters, digits and hyphens, starting with a letter or digit. Globally unique.'
+    Password:
+      type: string
+      minLength: 12
+      maxLength: 128
+      description: 12-128 Unicode characters. Never returned.
+    TotpCode:
+      type: string
+      pattern: ^[0-9]{6}$
+      minLength: 6
+      maxLength: 6
+      description: Current RFC 6238 code (SHA-1, 6 digits, 30 s step, +-1 step window). A code whose step is not newer than the last accepted one is rejected.
+    RecoveryCode:
+      type: string
+      pattern: ^[A-Za-z2-7]{16}$
+      minLength: 16
+      maxLength: 16
+      description: 'One-time TOTP recovery code: 16 base32 characters (case-insensitive).'
+    MfaToken:
+      type: string
+      maxLength: 128
+      pattern: ^sdmfa_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}_[0-9A-Za-z]{43}$
+      description: Intermediate login token (prefix sdmfa), valid 5 minutes, single use.
+    OrgName:
+      type: string
+      minLength: 3
+      maxLength: 63
+      pattern: ^[a-z0-9][a-z0-9-]{2,62}$
+      description: '3-63 characters: lower-case ASCII letters, digits and hyphens, starting with a letter or digit. A display label, not unique: organizations are identified by id.'
+    ServiceAccountName:
+      type: string
+      minLength: 3
+      maxLength: 63
+      pattern: ^[a-z0-9][a-z0-9-]{2,62}$
+      description: Unique within the organization.
+    TokenName:
+      type: string
+      minLength: 1
+      maxLength: 64
+      pattern: ^[A-Za-z0-9 ._:@-]{1,64}$
+      description: Human-readable label, 1-64 characters from [A-Za-z0-9 ._:@-].
+    Description:
+      type: string
+      maxLength: 256
+      pattern: ^[^\x00-\x1f\x7f]*$
+      description: Free text, up to 256 characters, no control characters.
+    Role:
+      type: string
+      enum:
+      - owner
+      - admin
+      - editor
+      - reader
+      description: reader < editor < admin < owner. owner exists only on organizations, exactly one per organization.
+    GrantableRole:
+      type: string
+      enum:
+      - admin
+      - editor
+      - reader
+      description: Roles that can be granted directly. owner is only obtained by organization creation or ownership transfer.
+    PrincipalType:
+      type: string
+      enum:
+      - user
+      - service_account
+    ResourceType:
+      type: string
+      enum:
+      - org
+      - zone
+      - service_account
+    InvitationStatus:
+      type: string
+      enum:
+      - pending
+      - accepted
+      - declined
+      - revoked
+      - expired
+    ZoneTransferStatus:
+      type: string
+      enum:
+      - pending
+      - accepted
+      - declined
+      - cancelled
+      - expired
+    Ttl:
+      type: integer
+      minimum: 0
+      maximum: 2147483647
+      description: Seconds, 0..2^31-1 (RFC 2181 section 8).
+    UserZoneName:
+      type: string
+      minLength: 1
+      maxLength: 254
+      pattern: ^(?=.{1,253}\.?$)(?!-)(?!.*\.-)(?!.*-\.)(?!.*\.\.)(?!.*\s)[^.*_\\]{1,63}(\.[^.*_\\]{1,63})*\.[Ss][Ll][Oo][Pp]\.?$
+      description: 'Zone name a user may register. Must be a strict subdomain of the backend setting USER_ZONE_SUFFIX (default ''slop''): foo.slop and a.b.slop are
+        accepted, ''slop'' itself and any name outside it (example.com, fooslop) are rejected with 422 validation_failed, field=name. The pattern reflects the default
+        suffix and is only a pre-check; the server applies the full rules: trailing dot optional, case-insensitive, IDN labels converted to punycode (UTS 46), labels
+        are LDH (letters, digits, hyphen; no leading or trailing hyphen; no underscore or wildcard), 1-63 octets per label, at most 253 octets without the trailing
+        dot, globally unique (409 if taken). The DNS server itself has no name restriction. Shared vectors: proto/testdata/user_zone_names.json.'
+    CanonicalZoneName:
+      type: string
+      minLength: 2
+      maxLength: 254
+      pattern: ^([a-z0-9-]{1,63}\.)+$
+      description: 'Absolute canonical zone name: lower case, punycode, with the trailing dot.'
+    OwnerName:
+      type: string
+      minLength: 1
+      maxLength: 254
+      pattern: ^(@|\*|(\*\.)?[^.\s*\\]{1,63}(\.[^.\s*\\]{1,63})*\.?)$
+      description: Owner name of a record. '@' means the zone apex. A name without a trailing dot is relative to the zone (www, _sip._tcp, *.dev). A name with a trailing
+        dot is absolute and must be equal to or below the zone apex. A leading '*' label creates a wildcard (RFC 4592). Labels may contain underscores (RFC 2181 section
+        11); IDN labels are converted to punycode. 1-63 octets per label, at most 253 octets for the absolute name. Responses always return the absolute canonical
+        form.
+    HostName:
+      type: string
+      minLength: 1
+      maxLength: 254
+      pattern: ^[^.\s\\]{1,63}(\.[^.\s\\]{1,63})*\.?$
+      description: Domain name inside RDATA. Always interpreted as absolute (a trailing dot is optional, never relative to the zone). IDN labels are converted to
+        punycode. 1-63 octets per label, at most 253 octets. Responses return the canonical form with the trailing dot.
+    HostNameOrRoot:
+      type: string
+      minLength: 1
+      maxLength: 254
+      pattern: ^(\.|[^.\s\\]{1,63}(\.[^.\s\\]{1,63})*\.?)$
+      description: Like HostName, but '.' (the root) is also accepted, e.g. null MX (RFC 7505), SRV 'service not available' (RFC 2782), NAPTR without replacement
+        (RFC 3403).
+    CharacterString:
+      type: string
+      maxLength: 255
+      description: 'RFC 1035 <character-string>: at most 255 octets after UTF-8 encoding (checked by the server on bytes).'
+    AData:
+      type: object
+      properties:
+        address:
+          type: string
+          format: ipv4
+          maxLength: 15
+          pattern: ^((25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\.){3}(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])$
+          description: Dotted-quad IPv4 address without leading zeros.
+      required:
+      - address
+      additionalProperties: false
+      description: RFC 1035 section 3.4.1.
+    AAAAData:
+      type: object
+      properties:
+        address:
+          type: string
+          format: ipv6
+          minLength: 2
+          maxLength: 45
+          pattern: ^[0-9A-Fa-f:.]{2,45}$
+          description: IPv6 address (RFC 4291 text form). Returned in RFC 5952 canonical form.
+      required:
+      - address
+      additionalProperties: false
+      description: RFC 3596.
+    NSData:
+      type: object
+      properties:
+        nsdname:
+          $ref: '#/components/schemas/HostName'
+      required:
+      - nsdname
+      additionalProperties: false
+      description: RFC 1035 section 3.3.11. The last NS record at the apex cannot be deleted (422).
+    CNAMEData:
+      type: object
+      properties:
+        target:
+          $ref: '#/components/schemas/HostName'
+      required:
+      - target
+      additionalProperties: false
+      description: RFC 1035 section 3.3.1. Not allowed at the apex; cannot coexist with any other record at the same owner (422).
+    PTRData:
+      type: object
+      properties:
+        ptrdname:
+          $ref: '#/components/schemas/HostName'
+      required:
+      - ptrdname
+      additionalProperties: false
+      description: RFC 1035 section 3.3.12.
+    MXData:
+      type: object
+      properties:
+        preference:
+          type: integer
+          minimum: 0
+          maximum: 65535
+        exchange:
+          $ref: '#/components/schemas/HostNameOrRoot'
+      required:
+      - preference
+      - exchange
+      additionalProperties: false
+      description: RFC 1035 section 3.3.9; exchange '.' with preference 0 is a null MX (RFC 7505).
+    TXTData:
+      type: object
+      properties:
+        strings:
+          type: array
+          minItems: 1
+          maxItems: 255
+          items:
+            $ref: '#/components/schemas/CharacterString'
+          description: One or more character-strings; total RDATA at most 65535 octets.
+      required:
+      - strings
+      additionalProperties: false
+      description: RFC 1035 section 3.3.14.
+    SRVData:
+      type: object
+      properties:
+        priority:
+          type: integer
+          minimum: 0
+          maximum: 65535
+        weight:
+          type: integer
+          minimum: 0
+          maximum: 65535
+        port:
+          type: integer
+          minimum: 0
+          maximum: 65535
+        target:
+          $ref: '#/components/schemas/HostNameOrRoot'
+      required:
+      - priority
+      - weight
+      - port
+      - target
+      additionalProperties: false
+      description: RFC 2782. Owner is expected to be _service._proto.name; target '.' means the service is not available.
+    CAAData:
+      type: object
+      properties:
+        flags:
+          type: integer
+          enum:
+          - 0
+          - 128
+          description: 0 or 128 (issuer critical).
+        tag:
+          type: string
+          minLength: 1
+          maxLength: 15
+          pattern: ^[A-Za-z0-9]{1,15}$
+          description: RFC 8659 tag, e.g. issue, issuewild, iodef.
+        value:
+          type: string
+          maxLength: 2048
+          pattern: ^[\x20-\x7e]*$
+          description: Printable ASCII.
+      required:
+      - flags
+      - tag
+      - value
+      additionalProperties: false
+      description: RFC 8659.
+    HINFOData:
+      type: object
+      properties:
+        cpu:
+          $ref: '#/components/schemas/CharacterString'
+        os:
+          $ref: '#/components/schemas/CharacterString'
+      required:
+      - cpu
+      - os
+      additionalProperties: false
+      description: RFC 1035 section 3.3.2.
+    SSHFPData:
+      type: object
+      properties:
+        algorithm:
+          type: integer
+          enum:
+          - 1
+          - 2
+          - 3
+          - 4
+          - 6
+          description: 1 RSA, 2 DSA, 3 ECDSA, 4 Ed25519, 6 Ed448 (RFC 4255, 6594, 7479, 8709).
+        fingerprint_type:
+          type: integer
+          enum:
+          - 1
+          - 2
+          description: 1 SHA-1 (40 hex digits), 2 SHA-256 (64 hex digits).
+        fingerprint:
+          type: string
+          pattern: ^([0-9A-Fa-f]{40}|[0-9A-Fa-f]{64})$
+          minLength: 40
+          maxLength: 64
+          description: Length must match fingerprint_type (422 otherwise).
+      required:
+      - algorithm
+      - fingerprint_type
+      - fingerprint
+      additionalProperties: false
+      description: RFC 4255.
+    TLSAData:
+      type: object
+      properties:
+        usage:
+          type: integer
+          enum:
+          - 0
+          - 1
+          - 2
+          - 3
+          - 255
+        selector:
+          type: integer
+          enum:
+          - 0
+          - 1
+          - 255
+        matching_type:
+          type: integer
+          enum:
+          - 0
+          - 1
+          - 2
+          - 255
+          description: 1 SHA-256 requires 64 hex digits, 2 SHA-512 requires 128 hex digits (422 otherwise).
+        certificate_association_data:
+          type: string
+          minLength: 2
+          maxLength: 16384
+          pattern: ^([0-9A-Fa-f]{2})+$
+      required:
+      - usage
+      - selector
+      - matching_type
+      - certificate_association_data
+      additionalProperties: false
+      description: RFC 6698. Owner is expected to be _port._proto.name.
+    DNAMEData:
+      type: object
+      properties:
+        target:
+          $ref: '#/components/schemas/HostName'
+      required:
+      - target
+      additionalProperties: false
+      description: RFC 6672. At most one DNAME per owner, cannot coexist with CNAME at the same owner, no other names may exist below the owner; allowed at the apex
+        (422 otherwise).
+    NAPTRData:
+      type: object
+      properties:
+        order:
+          type: integer
+          minimum: 0
+          maximum: 65535
+        preference:
+          type: integer
+          minimum: 0
+          maximum: 65535
+        flags:
+          type: string
+          maxLength: 255
+          pattern: ^[A-Za-z0-9]*$
+        services:
+          type: string
+          maxLength: 255
+          pattern: ^[A-Za-z0-9+:._-]*$
+        regexp:
+          type: string
+          maxLength: 255
+          description: Substitution expression; exactly one of regexp (non-empty) and replacement (not '.') must be set (RFC 3403 section 4.1, 422 otherwise).
+        replacement:
+          $ref: '#/components/schemas/HostNameOrRoot'
+      required:
+      - order
+      - preference
+      - flags
+      - services
+      - regexp
+      - replacement
+      additionalProperties: false
+      description: RFC 3403.
+    GPTData:
+      type: object
+      properties:
+        text:
+          type: string
+          maxLength: 40
+          description: UTF-8 text of 0-40 BYTES after UTF-8 encoding (the server checks bytes, not characters); empty string allowed.
+      required:
+      - text
+      additionalProperties: false
+      description: 'SlopDNS private type GPT, code 65280 (ADR 0003). Wire format: one character-string.'
+    GenericData:
+      type: object
+      properties:
+        rdata:
+          type: string
+          minLength: 4
+          maxLength: 200000
+          pattern: ^\\#[ \t]+(0|[1-9][0-9]{0,4})([ \t]+[0-9A-Fa-f]+)*[ \t]*$
+          description: 'RFC 3597 section 5 generic form: \# <length> <hex>, length 0..65535 and equal to the number of hex octets (whitespace between hex groups allowed).
+            Returned normalized as \# <len> <UPPER-HEX>.'
+      required:
+      - rdata
+      additionalProperties: false
+      description: Opaque RDATA in RFC 3597 form (responses only, legacy records).
+    GenericRecordType:
+      type: string
+      minLength: 5
+      maxLength: 9
+      pattern: ^TYPE[1-9][0-9]{0,4}$
+      not:
+        anyOf:
+        - pattern: ^TYPE(6|41|46|47|50|51)$
+        - pattern: ^TYPE(12[89]|1[3-9][0-9]|2[0-4][0-9]|25[0-5])$
+        - pattern: ^TYPE(6553[6-9]|655[4-9][0-9]|65[6-9][0-9]{2}|6[6-9][0-9]{3}|[7-9][0-9]{4})$
+      description: RFC 3597 type mnemonic TYPEnnn of a legacy opaque record (responses only). Requests with a TYPEnnn type are rejected with 422 validation_failed,
+        field=type.
+    ARecordVariant:
+      type: object
+      title: A record
+      properties:
+        name:
+          $ref: '#/components/schemas/OwnerName'
+        type:
+          type: string
+          const: A
+          description: Type code 1.
+        ttl:
+          $ref: '#/components/schemas/Ttl'
+        data:
+          $ref: '#/components/schemas/AData'
+      required:
+      - name
+      - type
+      - data
+    AAAARecordVariant:
+      type: object
+      title: AAAA record
+      properties:
+        name:
+          $ref: '#/components/schemas/OwnerName'
+        type:
+          type: string
+          const: AAAA
+          description: Type code 28.
+        ttl:
+          $ref: '#/components/schemas/Ttl'
+        data:
+          $ref: '#/components/schemas/AAAAData'
+      required:
+      - name
+      - type
+      - data
+    NSRecordVariant:
+      type: object
+      title: NS record
+      properties:
+        name:
+          $ref: '#/components/schemas/OwnerName'
+        type:
+          type: string
+          const: NS
+          description: Type code 2.
+        ttl:
+          $ref: '#/components/schemas/Ttl'
+        data:
+          $ref: '#/components/schemas/NSData'
+      required:
+      - name
+      - type
+      - data
+    CNAMERecordVariant:
+      type: object
+      title: CNAME record
+      properties:
+        name:
+          $ref: '#/components/schemas/OwnerName'
+        type:
+          type: string
+          const: CNAME
+          description: Type code 5.
+        ttl:
+          $ref: '#/components/schemas/Ttl'
+        data:
+          $ref: '#/components/schemas/CNAMEData'
+      required:
+      - name
+      - type
+      - data
+    PTRRecordVariant:
+      type: object
+      title: PTR record
+      properties:
+        name:
+          $ref: '#/components/schemas/OwnerName'
+        type:
+          type: string
+          const: PTR
+          description: Type code 12.
+        ttl:
+          $ref: '#/components/schemas/Ttl'
+        data:
+          $ref: '#/components/schemas/PTRData'
+      required:
+      - name
+      - type
+      - data
+    MXRecordVariant:
+      type: object
+      title: MX record
+      properties:
+        name:
+          $ref: '#/components/schemas/OwnerName'
+        type:
+          type: string
+          const: MX
+          description: Type code 15.
+        ttl:
+          $ref: '#/components/schemas/Ttl'
+        data:
+          $ref: '#/components/schemas/MXData'
+      required:
+      - name
+      - type
+      - data
+    TXTRecordVariant:
+      type: object
+      title: TXT record
+      properties:
+        name:
+          $ref: '#/components/schemas/OwnerName'
+        type:
+          type: string
+          const: TXT
+          description: Type code 16.
+        ttl:
+          $ref: '#/components/schemas/Ttl'
+        data:
+          $ref: '#/components/schemas/TXTData'
+      required:
+      - name
+      - type
+      - data
+    SRVRecordVariant:
+      type: object
+      title: SRV record
+      properties:
+        name:
+          $ref: '#/components/schemas/OwnerName'
+        type:
+          type: string
+          const: SRV
+          description: Type code 33.
+        ttl:
+          $ref: '#/components/schemas/Ttl'
+        data:
+          $ref: '#/components/schemas/SRVData'
+      required:
+      - name
+      - type
+      - data
+    CAARecordVariant:
+      type: object
+      title: CAA record
+      properties:
+        name:
+          $ref: '#/components/schemas/OwnerName'
+        type:
+          type: string
+          const: CAA
+          description: Type code 257.
+        ttl:
+          $ref: '#/components/schemas/Ttl'
+        data:
+          $ref: '#/components/schemas/CAAData'
+      required:
+      - name
+      - type
+      - data
+    HINFORecordVariant:
+      type: object
+      title: HINFO record
+      properties:
+        name:
+          $ref: '#/components/schemas/OwnerName'
+        type:
+          type: string
+          const: HINFO
+          description: Type code 13.
+        ttl:
+          $ref: '#/components/schemas/Ttl'
+        data:
+          $ref: '#/components/schemas/HINFOData'
+      required:
+      - name
+      - type
+      - data
+    SSHFPRecordVariant:
+      type: object
+      title: SSHFP record
+      properties:
+        name:
+          $ref: '#/components/schemas/OwnerName'
+        type:
+          type: string
+          const: SSHFP
+          description: Type code 44.
+        ttl:
+          $ref: '#/components/schemas/Ttl'
+        data:
+          $ref: '#/components/schemas/SSHFPData'
+      required:
+      - name
+      - type
+      - data
+    TLSARecordVariant:
+      type: object
+      title: TLSA record
+      properties:
+        name:
+          $ref: '#/components/schemas/OwnerName'
+        type:
+          type: string
+          const: TLSA
+          description: Type code 52.
+        ttl:
+          $ref: '#/components/schemas/Ttl'
+        data:
+          $ref: '#/components/schemas/TLSAData'
+      required:
+      - name
+      - type
+      - data
+    DNAMERecordVariant:
+      type: object
+      title: DNAME record
+      properties:
+        name:
+          $ref: '#/components/schemas/OwnerName'
+        type:
+          type: string
+          const: DNAME
+          description: Type code 39.
+        ttl:
+          $ref: '#/components/schemas/Ttl'
+        data:
+          $ref: '#/components/schemas/DNAMEData'
+      required:
+      - name
+      - type
+      - data
+    NAPTRRecordVariant:
+      type: object
+      title: NAPTR record
+      properties:
+        name:
+          $ref: '#/components/schemas/OwnerName'
+        type:
+          type: string
+          const: NAPTR
+          description: Type code 35.
+        ttl:
+          $ref: '#/components/schemas/Ttl'
+        data:
+          $ref: '#/components/schemas/NAPTRData'
+      required:
+      - name
+      - type
+      - data
+    GPTRecordVariant:
+      type: object
+      title: GPT record
+      properties:
+        name:
+          $ref: '#/components/schemas/OwnerName'
+        type:
+          type: string
+          const: GPT
+          description: Type code 65280.
+        ttl:
+          $ref: '#/components/schemas/Ttl'
+        data:
+          $ref: '#/components/schemas/GPTData'
+      required:
+      - name
+      - type
+      - data
+    GenericRecordVariant:
+      type: object
+      title: Generic record (read-only, legacy)
+      description: Response-only representation of an opaque record stored before the generic RFC 3597 input form was removed. Never accepted in requests.
+      properties:
+        name:
+          $ref: '#/components/schemas/OwnerName'
+        type:
+          $ref: '#/components/schemas/GenericRecordType'
+        ttl:
+          $ref: '#/components/schemas/Ttl'
+        data:
+          $ref: '#/components/schemas/GenericData'
+      required:
+      - name
+      - type
+      - data
+    RecordVariant:
+      oneOf:
+      - $ref: '#/components/schemas/ARecordVariant'
+      - $ref: '#/components/schemas/AAAARecordVariant'
+      - $ref: '#/components/schemas/NSRecordVariant'
+      - $ref: '#/components/schemas/CNAMERecordVariant'
+      - $ref: '#/components/schemas/PTRRecordVariant'
+      - $ref: '#/components/schemas/MXRecordVariant'
+      - $ref: '#/components/schemas/TXTRecordVariant'
+      - $ref: '#/components/schemas/SRVRecordVariant'
+      - $ref: '#/components/schemas/CAARecordVariant'
+      - $ref: '#/components/schemas/HINFORecordVariant'
+      - $ref: '#/components/schemas/SSHFPRecordVariant'
+      - $ref: '#/components/schemas/TLSARecordVariant'
+      - $ref: '#/components/schemas/DNAMERecordVariant'
+      - $ref: '#/components/schemas/NAPTRRecordVariant'
+      - $ref: '#/components/schemas/GPTRecordVariant'
+      description: 'Discriminated union on ''type''. Only the named types below can be created or replaced; the generic RFC 3597 form (type TYPEnnn with \#
+        hex RDATA) is not accepted (422 validation_failed, field=type). Each variant fixes the shape of ''data''. ttl defaults to the zone default_ttl. SOA is not a record type here:
+        it is managed through zone soa settings. All records with the same (name, type) form an RRSet that has one TTL (RFC 2181 section 5.2): creating or updating
+        a record with a ttl sets that ttl on the whole RRSet. Duplicate records (same name, type and RDATA) are rejected with 409. CNAME/DNAME/NS-apex integrity rules
+        are rejected with 422.'
+    RecordInput:
+      allOf:
+      - $ref: '#/components/schemas/RecordVariant'
+      unevaluatedProperties: false
+      description: Request body for creating or replacing a record.
+    RecordMeta:
+      type: object
+      properties:
+        id:
+          $ref: '#/components/schemas/Uuid'
+        zone_id:
+          $ref: '#/components/schemas/Uuid'
+        type_code:
+          type: integer
+          minimum: 1
+          maximum: 65535
+          readOnly: true
+        ttl:
+          $ref: '#/components/schemas/Ttl'
+        created_at:
+          $ref: '#/components/schemas/Timestamp'
+        updated_at:
+          $ref: '#/components/schemas/Timestamp'
+      required:
+      - id
+      - zone_id
+      - type_code
+      - ttl
+      - created_at
+      - updated_at
+    Record:
+      allOf:
+      - $ref: '#/components/schemas/RecordMeta'
+      - oneOf:
+        - $ref: '#/components/schemas/RecordVariant'
+        - $ref: '#/components/schemas/GenericRecordVariant'
+      unevaluatedProperties: false
+      description: Stored record. name is absolute canonical, ttl is always present, type is the mnemonic for structured types. TYPEnnn with GenericData appears
+        only for opaque records stored before generic input was removed; such records can be read and deleted but not created or replaced.
+    SoaInput:
+      type: object
+      properties:
+        mname:
+          $ref: '#/components/schemas/HostName'
+        rname:
+          allOf:
+          - $ref: '#/components/schemas/HostName'
+          description: Responsible mailbox in domain-name form (hostmaster.example.slop.), RFC 1035 section 8.
+        refresh:
+          type: integer
+          minimum: 60
+          maximum: 2147483647
+        retry:
+          type: integer
+          minimum: 60
+          maximum: 2147483647
+        expire:
+          type: integer
+          minimum: 60
+          maximum: 2147483647
+        minimum:
+          type: integer
+          minimum: 0
+          maximum: 86400
+      additionalProperties: false
+      description: 'Optional SOA settings. Omitted fields keep their current value (or the backend default on creation). serial is never set by clients: it is incremented
+        by every change of the zone.'
+      minProperties: 1
+    Soa:
+      type: object
+      properties:
+        mname:
+          type: string
+          maxLength: 254
+        rname:
+          type: string
+          maxLength: 254
+        serial:
+          type: integer
+          minimum: 0
+          maximum: 4294967295
+          readOnly: true
+        refresh:
+          type: integer
+          minimum: 60
+          maximum: 2147483647
+        retry:
+          type: integer
+          minimum: 60
+          maximum: 2147483647
+        expire:
+          type: integer
+          minimum: 60
+          maximum: 2147483647
+        minimum:
+          type: integer
+          minimum: 0
+          maximum: 86400
+      required:
+      - mname
+      - rname
+      - serial
+      - refresh
+      - retry
+      - expire
+      - minimum
+      additionalProperties: false
+    ZoneCreate:
+      type: object
+      properties:
+        org_id:
+          $ref: '#/components/schemas/Uuid'
+        name:
+          $ref: '#/components/schemas/UserZoneName'
+        default_ttl:
+          allOf:
+          - $ref: '#/components/schemas/Ttl'
+          description: TTL for records created without ttl. Default from backend config (3600).
+        soa:
+          $ref: '#/components/schemas/SoaInput'
+      required:
+      - org_id
+      - name
+      additionalProperties: false
+      description: Requires editor on the organization. The SOA and the apex NS records (from backend config) are created automatically.
+    ZoneUpdate:
+      type: object
+      properties:
+        default_ttl:
+          $ref: '#/components/schemas/Ttl'
+        soa:
+          $ref: '#/components/schemas/SoaInput'
+      additionalProperties: false
+      description: Requires editor on the zone. Zone name and organization cannot be changed here (use zone transfer).
+      minProperties: 1
+    Zone:
+      type: object
+      properties:
+        id:
+          $ref: '#/components/schemas/Uuid'
+        org_id:
+          $ref: '#/components/schemas/Uuid'
+        name:
+          $ref: '#/components/schemas/CanonicalZoneName'
+        default_ttl:
+          $ref: '#/components/schemas/Ttl'
+        soa:
+          $ref: '#/components/schemas/Soa'
+        my_role:
+          allOf:
+          - $ref: '#/components/schemas/Role'
+          description: 'Caller''s effective role on the zone: max(zone binding, org binding).'
+        pending_transfer_id:
+          oneOf:
+          - $ref: '#/components/schemas/Uuid'
+          - type: 'null'
+          description: Pending zone transfer, if any.
+        created_at:
+          $ref: '#/components/schemas/Timestamp'
+        updated_at:
+          $ref: '#/components/schemas/Timestamp'
+      required:
+      - id
+      - org_id
+      - name
+      - default_ttl
+      - soa
+      - my_role
+      - pending_transfer_id
+      - created_at
+      - updated_at
+      additionalProperties: false
+    UserRef:
+      type: object
+      properties:
+        id:
+          $ref: '#/components/schemas/Uuid'
+        username:
+          $ref: '#/components/schemas/Username'
+      required:
+      - id
+      - username
+      additionalProperties: false
+    User:
+      type: object
+      properties:
+        id:
+          $ref: '#/components/schemas/Uuid'
+        username:
+          $ref: '#/components/schemas/Username'
+        created_at:
+          $ref: '#/components/schemas/Timestamp'
+      required:
+      - id
+      - username
+      - created_at
+      additionalProperties: false
+    UserMe:
+      type: object
+      properties:
+        principal_type:
+          type: string
+          const: user
+        id:
+          $ref: '#/components/schemas/Uuid'
+        username:
+          $ref: '#/components/schemas/Username'
+        totp_enabled:
+          type: boolean
+        recovery_codes_remaining:
+          type: integer
+          minimum: 0
+          maximum: 10
+        created_at:
+          $ref: '#/components/schemas/Timestamp'
+      required:
+      - principal_type
+      - id
+      - username
+      - totp_enabled
+      - recovery_codes_remaining
+      - created_at
+      additionalProperties: false
+    ServiceAccountMe:
+      type: object
+      properties:
+        principal_type:
+          type: string
+          const: service_account
+        id:
+          $ref: '#/components/schemas/Uuid'
+        name:
+          $ref: '#/components/schemas/ServiceAccountName'
+        org_id:
+          $ref: '#/components/schemas/Uuid'
+        created_at:
+          $ref: '#/components/schemas/Timestamp'
+      required:
+      - principal_type
+      - id
+      - name
+      - org_id
+      - created_at
+      additionalProperties: false
+    Me:
+      oneOf:
+      - $ref: '#/components/schemas/UserMe'
+      - $ref: '#/components/schemas/ServiceAccountMe'
+      description: Current principal, discriminated by principal_type.
+    RegisterRequest:
+      type: object
+      properties:
+        username:
+          $ref: '#/components/schemas/Username'
+        password:
+          $ref: '#/components/schemas/Password'
+      required:
+      - username
+      - password
+      additionalProperties: false
+    LoginRequest:
+      type: object
+      properties:
+        username:
+          $ref: '#/components/schemas/Username'
+        password:
+          $ref: '#/components/schemas/Password'
+      required:
+      - username
+      - password
+      additionalProperties: false
+    LoginSuccess:
+      type: object
+      properties:
+        mfa_required:
+          type: boolean
+          const: false
+        user:
+          $ref: '#/components/schemas/User'
+      required:
+      - mfa_required
+      - user
+      additionalProperties: false
+      description: Session established; the response sets the slopdns_session cookie.
+    LoginMfaRequired:
+      type: object
+      properties:
+        mfa_required:
+          type: boolean
+          const: true
+        mfa_token:
+          $ref: '#/components/schemas/MfaToken'
+        mfa_expires_at:
+          $ref: '#/components/schemas/Timestamp'
+      required:
+      - mfa_required
+      - mfa_token
+      - mfa_expires_at
+      additionalProperties: false
+      description: Password accepted, TOTP enabled. No cookie is set. Continue with POST /auth/login/totp.
+    LoginResponse:
+      oneOf:
+      - $ref: '#/components/schemas/LoginSuccess'
+      - $ref: '#/components/schemas/LoginMfaRequired'
+    LoginTotpWithCode:
+      type: object
+      properties:
+        mfa_token:
+          $ref: '#/components/schemas/MfaToken'
+        code:
+          $ref: '#/components/schemas/TotpCode'
+      required:
+      - mfa_token
+      - code
+      additionalProperties: false
+    LoginTotpWithRecoveryCode:
+      type: object
+      properties:
+        mfa_token:
+          $ref: '#/components/schemas/MfaToken'
+        recovery_code:
+          $ref: '#/components/schemas/RecoveryCode'
+      required:
+      - mfa_token
+      - recovery_code
+      additionalProperties: false
+    LoginTotpRequest:
+      oneOf:
+      - $ref: '#/components/schemas/LoginTotpWithCode'
+      - $ref: '#/components/schemas/LoginTotpWithRecoveryCode'
+      description: Exactly one of code and recovery_code.
+    TotpSetupResponse:
+      type: object
+      properties:
+        secret:
+          type: string
+          pattern: ^[A-Z2-7]{32}$
+          minLength: 32
+          maxLength: 32
+          description: 20-byte secret, base32 without padding.
+        otpauth_uri:
+          type: string
+          format: uri
+          maxLength: 512
+          pattern: ^otpauth://totp/
+      required:
+      - secret
+      - otpauth_uri
+      additionalProperties: false
+    TotpEnableRequest:
+      type: object
+      properties:
+        code:
+          $ref: '#/components/schemas/TotpCode'
+      required:
+      - code
+      additionalProperties: false
+    RecoveryCodesResponse:
+      type: object
+      properties:
+        recovery_codes:
+          type: array
+          minItems: 10
+          maxItems: 10
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/RecoveryCode'
+          description: Shown once.
+      required:
+      - recovery_codes
+      additionalProperties: false
+    TotpDisableWithCode:
+      type: object
+      properties:
+        password:
+          $ref: '#/components/schemas/Password'
+        code:
+          $ref: '#/components/schemas/TotpCode'
+      required:
+      - password
+      - code
+      additionalProperties: false
+    TotpDisableWithRecoveryCode:
+      type: object
+      properties:
+        password:
+          $ref: '#/components/schemas/Password'
+        recovery_code:
+          $ref: '#/components/schemas/RecoveryCode'
+      required:
+      - password
+      - recovery_code
+      additionalProperties: false
+    TotpDisableRequest:
+      oneOf:
+      - $ref: '#/components/schemas/TotpDisableWithCode'
+      - $ref: '#/components/schemas/TotpDisableWithRecoveryCode'
+    RecoveryCodesRegenerateRequest:
+      type: object
+      properties:
+        password:
+          $ref: '#/components/schemas/Password'
+        code:
+          $ref: '#/components/schemas/TotpCode'
+      required:
+      - password
+      - code
+      additionalProperties: false
+    ApiToken:
+      type: object
+      properties:
+        id:
+          $ref: '#/components/schemas/Uuid'
+        name:
+          $ref: '#/components/schemas/TokenName'
+        kind:
+          type: string
+          enum:
+          - user
+          - service_account
+        created_at:
+          $ref: '#/components/schemas/Timestamp'
+        expires_at:
+          oneOf:
+          - $ref: '#/components/schemas/Timestamp'
+          - type: 'null'
+        last_used_at:
+          oneOf:
+          - $ref: '#/components/schemas/Timestamp'
+          - type: 'null'
+      required:
+      - id
+      - name
+      - kind
+      - created_at
+      - expires_at
+      - last_used_at
+      additionalProperties: false
+      description: API token metadata. The secret is never returned after creation.
+    CreatedApiToken:
+      type: object
+      properties:
+        id:
+          $ref: '#/components/schemas/Uuid'
+        name:
+          $ref: '#/components/schemas/TokenName'
+        kind:
+          type: string
+          enum:
+          - user
+          - service_account
+        created_at:
+          $ref: '#/components/schemas/Timestamp'
+        expires_at:
+          oneOf:
+          - $ref: '#/components/schemas/Timestamp'
+          - type: 'null'
+        last_used_at:
+          oneOf:
+          - $ref: '#/components/schemas/Timestamp'
+          - type: 'null'
+        token:
+          type: string
+          maxLength: 128
+          pattern: ^sd(pat|sat)_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}_[0-9A-Za-z]{43}$
+          description: Bearer token <prefix>_<id>_<secret>, prefix sdpat (user) or sdsat (service account), secret = 32 random bytes in base62 (43 characters).
+            Shown only once.
+      required:
+      - id
+      - name
+      - kind
+      - created_at
+      - expires_at
+      - last_used_at
+      - token
+      additionalProperties: false
+      description: API token metadata together with the secret. Returned only by token creation.
+    UserTokenCreate:
+      type: object
+      properties:
+        name:
+          $ref: '#/components/schemas/TokenName'
+        expires_in_days:
+          type: integer
+          minimum: 1
+          maximum: 3650
+          default: 90
+          description: Lifetime in days. Ignored when no_expiry is true.
+        no_expiry:
+          type: boolean
+          default: false
+          description: Create a token without expiry.
+        totp_code:
+          allOf:
+          - $ref: '#/components/schemas/TotpCode'
+          description: Required when the user has TOTP enabled (401 mfa_invalid otherwise).
+      required:
+      - name
+      additionalProperties: false
+    ServiceAccountTokenCreate:
+      type: object
+      properties:
+        name:
+          $ref: '#/components/schemas/TokenName'
+      required:
+      - name
+      additionalProperties: false
+      description: Service account tokens never expire until revoked.
+    Org:
+      type: object
+      properties:
+        id:
+          $ref: '#/components/schemas/Uuid'
+        name:
+          $ref: '#/components/schemas/OrgName'
+        owner:
+          $ref: '#/components/schemas/UserRef'
+        my_role:
+          oneOf:
+          - $ref: '#/components/schemas/Role'
+          - type: 'null'
+          description: Caller's role on the organization itself; null if the caller is a member only through zone or service account bindings.
+        created_at:
+          $ref: '#/components/schemas/Timestamp'
+        updated_at:
+          $ref: '#/components/schemas/Timestamp'
+      required:
+      - id
+      - name
+      - owner
+      - my_role
+      - created_at
+      - updated_at
+      additionalProperties: false
+    OrgCreate:
+      type: object
+      properties:
+        name:
+          $ref: '#/components/schemas/OrgName'
+      required:
+      - name
+      additionalProperties: false
+      description: Any authenticated user (not a service account) may create organizations and becomes their owner.
+    OrgUpdate:
+      type: object
+      properties:
+        name:
+          $ref: '#/components/schemas/OrgName'
+      required:
+      - name
+      additionalProperties: false
+    Member:
+      type: object
+      properties:
+        principal_type:
+          $ref: '#/components/schemas/PrincipalType'
+        principal_id:
+          $ref: '#/components/schemas/Uuid'
+        name:
+          type: string
+          minLength: 3
+          maxLength: 63
+          description: Username or service account name.
+        org_role:
+          oneOf:
+          - $ref: '#/components/schemas/Role'
+          - type: 'null'
+          description: Role on the organization; null if the member only has zone or service account bindings.
+      required:
+      - principal_type
+      - principal_id
+      - name
+      - org_role
+      additionalProperties: false
+    TransferOwnershipRequest:
+      type: object
+      properties:
+        user_id:
+          $ref: '#/components/schemas/Uuid'
+      required:
+      - user_id
+      additionalProperties: false
+      description: Target must be a user member of the organization. The previous owner becomes admin.
+    InvitationCreate:
+      type: object
+      properties:
+        username:
+          $ref: '#/components/schemas/Username'
+        role:
+          $ref: '#/components/schemas/GrantableRole'
+      required:
+      - username
+      - role
+      additionalProperties: false
+    Invitation:
+      type: object
+      properties:
+        id:
+          $ref: '#/components/schemas/Uuid'
+        org:
+          type: object
+          properties:
+            id:
+              $ref: '#/components/schemas/Uuid'
+            name:
+              $ref: '#/components/schemas/OrgName'
+            owner:
+              allOf:
+              - $ref: '#/components/schemas/UserRef'
+              description: Current owner of the organization, so the invitee can tell look-alike organization names apart.
+          required:
+          - id
+          - name
+          - owner
+          additionalProperties: false
+        invitee:
+          $ref: '#/components/schemas/UserRef'
+        invited_by:
+          $ref: '#/components/schemas/UserRef'
+        role:
+          $ref: '#/components/schemas/GrantableRole'
+        status:
+          $ref: '#/components/schemas/InvitationStatus'
+        created_at:
+          $ref: '#/components/schemas/Timestamp'
+        expires_at:
+          allOf:
+          - $ref: '#/components/schemas/Timestamp'
+          description: created_at + 7 days. After it the status is expired.
+        decided_at:
+          oneOf:
+          - $ref: '#/components/schemas/Timestamp'
+          - type: 'null'
+      required:
+      - id
+      - org
+      - invitee
+      - invited_by
+      - role
+      - status
+      - created_at
+      - expires_at
+      - decided_at
+      additionalProperties: false
+    ZoneTransferCreate:
+      type: object
+      properties:
+        username:
+          $ref: '#/components/schemas/Username'
+      required:
+      - username
+      additionalProperties: false
+      description: Recipient may be any registered user except the caller.
+    ZoneTransferAccept:
+      type: object
+      properties:
+        target_org_id:
+          $ref: '#/components/schemas/Uuid'
+      required:
+      - target_org_id
+      additionalProperties: false
+      description: The caller must be owner or admin of target_org_id (403), and it must differ from the zone's current organization (422).
+    ZoneTransfer:
+      type: object
+      properties:
+        id:
+          $ref: '#/components/schemas/Uuid'
+        zone:
+          type: object
+          properties:
+            id:
+              $ref: '#/components/schemas/Uuid'
+            name:
+              $ref: '#/components/schemas/CanonicalZoneName'
+          required:
+          - id
+          - name
+          additionalProperties: false
+        from_org_id:
+          $ref: '#/components/schemas/Uuid'
+        from_user:
+          $ref: '#/components/schemas/UserRef'
+        to_user:
+          $ref: '#/components/schemas/UserRef'
+        target_org_id:
+          oneOf:
+          - $ref: '#/components/schemas/Uuid'
+          - type: 'null'
+          description: Set when accepted.
+        status:
+          $ref: '#/components/schemas/ZoneTransferStatus'
+        created_at:
+          $ref: '#/components/schemas/Timestamp'
+        expires_at:
+          allOf:
+          - $ref: '#/components/schemas/Timestamp'
+          description: created_at + 7 days. After it the status is expired.
+        decided_at:
+          oneOf:
+          - $ref: '#/components/schemas/Timestamp'
+          - type: 'null'
+      required:
+      - id
+      - zone
+      - from_org_id
+      - from_user
+      - to_user
+      - target_org_id
+      - status
+      - created_at
+      - expires_at
+      - decided_at
+      additionalProperties: false
+    RoleBinding:
+      type: object
+      properties:
+        id:
+          $ref: '#/components/schemas/Uuid'
+        principal_type:
+          $ref: '#/components/schemas/PrincipalType'
+        principal_id:
+          $ref: '#/components/schemas/Uuid'
+        principal_name:
+          type: string
+          minLength: 3
+          maxLength: 63
+        resource_type:
+          $ref: '#/components/schemas/ResourceType'
+        resource_id:
+          $ref: '#/components/schemas/Uuid'
+        org_id:
+          $ref: '#/components/schemas/Uuid'
+        role:
+          $ref: '#/components/schemas/Role'
+        granted_by_user_id:
+          oneOf:
+          - $ref: '#/components/schemas/Uuid'
+          - type: 'null'
+        created_at:
+          $ref: '#/components/schemas/Timestamp'
+      required:
+      - id
+      - principal_type
+      - principal_id
+      - principal_name
+      - resource_type
+      - resource_id
+      - org_id
+      - role
+      - granted_by_user_id
+      - created_at
+      additionalProperties: false
+    RoleBindingCreateByPrincipal:
+      type: object
+      properties:
+        principal_type:
+          $ref: '#/components/schemas/PrincipalType'
+        principal_id:
+          $ref: '#/components/schemas/Uuid'
+        resource_type:
+          $ref: '#/components/schemas/ResourceType'
+        resource_id:
+          $ref: '#/components/schemas/Uuid'
+        role:
+          $ref: '#/components/schemas/GrantableRole'
+      required:
+      - principal_type
+      - principal_id
+      - resource_type
+      - resource_id
+      - role
+      additionalProperties: false
+    RoleBindingCreateByUsername:
+      type: object
+      properties:
+        username:
+          $ref: '#/components/schemas/Username'
+        resource_type:
+          $ref: '#/components/schemas/ResourceType'
+        resource_id:
+          $ref: '#/components/schemas/Uuid'
+        role:
+          $ref: '#/components/schemas/GrantableRole'
+      required:
+      - username
+      - resource_type
+      - resource_id
+      - role
+      additionalProperties: false
+    RoleBindingCreate:
+      oneOf:
+      - $ref: '#/components/schemas/RoleBindingCreateByPrincipal'
+      - $ref: '#/components/schemas/RoleBindingCreateByUsername'
+      description: 'Requires admin on the resource. The granted role must not exceed admin and the caller cannot raise their own role (403). Service accounts can
+        only receive roles on objects of their own organization (422). A user who is not yet a member of the resource''s organization cannot receive any
+        role (organization, zone or service account): invite them first (422). A second binding for the same principal and resource is rejected with 409; use PATCH to change the role.'
+    RoleBindingUpdate:
+      type: object
+      properties:
+        role:
+          $ref: '#/components/schemas/GrantableRole'
+      required:
+      - role
+      additionalProperties: false
+      description: The owner binding cannot be changed (403); use transfer-ownership.
+    ServiceAccount:
+      type: object
+      properties:
+        id:
+          $ref: '#/components/schemas/Uuid'
+        org_id:
+          $ref: '#/components/schemas/Uuid'
+        name:
+          $ref: '#/components/schemas/ServiceAccountName'
+        description:
+          $ref: '#/components/schemas/Description'
+        created_by:
+          $ref: '#/components/schemas/UserRef'
+        my_role:
+          $ref: '#/components/schemas/Role'
+        created_at:
+          $ref: '#/components/schemas/Timestamp'
+        updated_at:
+          $ref: '#/components/schemas/Timestamp'
+      required:
+      - id
+      - org_id
+      - name
+      - description
+      - created_by
+      - my_role
+      - created_at
+      - updated_at
+      additionalProperties: false
+    ServiceAccountCreate:
+      type: object
+      properties:
+        org_id:
+          $ref: '#/components/schemas/Uuid'
+        name:
+          $ref: '#/components/schemas/ServiceAccountName'
+        description:
+          $ref: '#/components/schemas/Description'
+      required:
+      - org_id
+      - name
+      additionalProperties: false
+      description: Requires editor on the organization; only users can create service accounts.
+    ServiceAccountUpdate:
+      type: object
+      properties:
+        name:
+          $ref: '#/components/schemas/ServiceAccountName'
+        description:
+          $ref: '#/components/schemas/Description'
+      additionalProperties: false
+      description: Requires editor on the service account.
+      minProperties: 1
+    Health:
+      type: object
+      properties:
+        status:
+          type: string
+          enum:
+          - ok
+          - unavailable
+        checks:
+          type: object
+          maxProperties: 32
+          additionalProperties:
+            type: string
+            maxLength: 256
+          description: 'Readiness: per-dependency status (readyz only).'
+      required:
+      - status
+      additionalProperties: false
+    OrgPage:
+      type: object
+      properties:
+        items:
+          type: array
+          maxItems: 500
+          items:
+            $ref: '#/components/schemas/Org'
+        total:
+          type: integer
+          minimum: 0
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 500
+        offset:
+          type: integer
+          minimum: 0
+      required:
+      - items
+      - total
+      - limit
+      - offset
+      additionalProperties: false
+    MemberPage:
+      type: object
+      properties:
+        items:
+          type: array
+          maxItems: 500
+          items:
+            $ref: '#/components/schemas/Member'
+        total:
+          type: integer
+          minimum: 0
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 500
+        offset:
+          type: integer
+          minimum: 0
+      required:
+      - items
+      - total
+      - limit
+      - offset
+      additionalProperties: false
+    InvitationPage:
+      type: object
+      properties:
+        items:
+          type: array
+          maxItems: 500
+          items:
+            $ref: '#/components/schemas/Invitation'
+        total:
+          type: integer
+          minimum: 0
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 500
+        offset:
+          type: integer
+          minimum: 0
+      required:
+      - items
+      - total
+      - limit
+      - offset
+      additionalProperties: false
+    ZonePage:
+      type: object
+      properties:
+        items:
+          type: array
+          maxItems: 500
+          items:
+            $ref: '#/components/schemas/Zone'
+        total:
+          type: integer
+          minimum: 0
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 500
+        offset:
+          type: integer
+          minimum: 0
+      required:
+      - items
+      - total
+      - limit
+      - offset
+      additionalProperties: false
+    RecordPage:
+      type: object
+      properties:
+        items:
+          type: array
+          maxItems: 500
+          items:
+            $ref: '#/components/schemas/Record'
+        total:
+          type: integer
+          minimum: 0
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 500
+        offset:
+          type: integer
+          minimum: 0
+      required:
+      - items
+      - total
+      - limit
+      - offset
+      additionalProperties: false
+    ZoneTransferPage:
+      type: object
+      properties:
+        items:
+          type: array
+          maxItems: 500
+          items:
+            $ref: '#/components/schemas/ZoneTransfer'
+        total:
+          type: integer
+          minimum: 0
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 500
+        offset:
+          type: integer
+          minimum: 0
+      required:
+      - items
+      - total
+      - limit
+      - offset
+      additionalProperties: false
+    RoleBindingPage:
+      type: object
+      properties:
+        items:
+          type: array
+          maxItems: 500
+          items:
+            $ref: '#/components/schemas/RoleBinding'
+        total:
+          type: integer
+          minimum: 0
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 500
+        offset:
+          type: integer
+          minimum: 0
+      required:
+      - items
+      - total
+      - limit
+      - offset
+      additionalProperties: false
+    ServiceAccountPage:
+      type: object
+      properties:
+        items:
+          type: array
+          maxItems: 500
+          items:
+            $ref: '#/components/schemas/ServiceAccount'
+        total:
+          type: integer
+          minimum: 0
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 500
+        offset:
+          type: integer
+          minimum: 0
+      required:
+      - items
+      - total
+      - limit
+      - offset
+      additionalProperties: false
+    ApiTokenPage:
+      type: object
+      properties:
+        items:
+          type: array
+          maxItems: 500
+          items:
+            $ref: '#/components/schemas/ApiToken'
+        total:
+          type: integer
+          minimum: 0
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 500
+        offset:
+          type: integer
+          minimum: 0
+      required:
+      - items
+      - total
+      - limit
+      - offset
+      additionalProperties: false

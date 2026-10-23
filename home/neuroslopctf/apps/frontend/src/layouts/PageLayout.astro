@@ -1,0 +1,17 @@
+---
+import BaseLayout from './BaseLayout.astro';
+import Header from '../components/Header.astro';
+import Footer from '../components/Footer.astro';
+import InterfaceCaption from '../components/InterfaceCaption.astro';
+interface Props {title:string; page:string}
+const {title,page}=Astro.props;
+---
+<BaseLayout title={title+' · NeuroslopCTF'}>
+ <div class="container"><Header current={page} />
+ <main id="main-content" class={`page-shell v2-page page-${page}`}>
+  <div class="page-intro" data-aos="fade-up"><div class="eyebrow">Раздел платформы</div>
+  <h1 class="page-title gradient-text">{title}</h1><InterfaceCaption page={page} /></div>
+  <div data-page={page} aria-busy="true"><p role="status">Загружаем содержимое…</p></div>
+ </main></div><Footer />
+ <script>import {boot} from '../lib/ui/app';void boot();</script>
+</BaseLayout>

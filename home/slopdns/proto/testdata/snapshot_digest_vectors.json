@@ -1,0 +1,185 @@
+{
+  "description": "SnapshotEnd.digest = SHA-256(canonical preimage), ADR 0002. Input zones, rrsets and rdata are deliberately NOT in canonical order; implementations must sort before hashing. Preimage: u32 zone_count, then per zone sorted by apex bytes: u32 len, apex, u32 rrset_count, then per rrset sorted by (owner bytes, type, rr_class): u32 len, owner, u32 type, u32 rr_class, u32 ttl, u32 rdata_count, then per rdata sorted by bytes: u32 len, rdata. All integers are uint32 big-endian. Byte order comparison is lexicographic with a shorter prefix sorting first (memcmp then length).",
+  "vectors": [
+    {
+      "canonical_preimage_hex": "0000000300000007612e736c6f702e0000000200000007612e736c6f702e000000020000000100000e100000000100000012036e733107736c6f70646e7304736c6f700000000007612e736c6f702e000000060000000100000e10000000010000003f036e733107736c6f70646e7304736c6f70000a686f73746d617374657207736c6f70646e7304736c6f70000000000300000e1000000384001275000000012c00000009622e612e736c6f702e0000000200000009622e612e736c6f702e000000020000000100000e100000000100000012036e733107736c6f70646e7304736c6f700000000009622e612e736c6f702e000000060000000100000e10000000010000003f036e733107736c6f70646e7304736c6f70000a686f73746d617374657207736c6f70646e7304736c6f70000000000100000e1000000384001275000000012c0000000d6578616d706c652e736c6f702e0000000c0000000f2a2e6578616d706c652e736c6f702e0000000100000001000000780000000100000004c0000263000000175f7369702e5f7463702e6578616d706c652e736c6f702e00000021000000010000012c0000000100000018000a003c13c403736970076578616d706c6504736c6f700000000013616c6961732e6578616d706c652e736c6f702e00000005000000010000012c000000010000001203777777076578616d706c6504736c6f70000000000d6578616d706c652e736c6f702e000000020000000100000e100000000200000012036e733107736c6f70646e7304736c6f700000000012036e733207736c6f70646e7304736c6f70000000000d6578616d706c652e736c6f702e000000060000000100000e10000000010000003f036e733107736c6f70646e7304736c6f70000a686f73746d617374657207736c6f70646e7304736c6f70000000000700000e1000000384001275000000012c0000000d6578616d706c652e736c6f702e0000000f0000000100000e100000000200000014000a036d7831076578616d706c6504736c6f7000000000140014036d7832076578616d706c6504736c6f70000000000d6578616d706c652e736c6f702e00000010000000010000012c000000020000000c0568656c6c6f05776f726c640000000c0b763d73706631202d616c6c0000000d6578616d706c652e736c6f702e0000ff00000000010000003c000000020000000100000000131268656c6c6f2066726f6d20736c6f70646e730000000d6578616d706c652e736c6f702e0000fffe000000010000012c0000000100000004deadbeef000000146c65676163792e6578616d706c652e736c6f702e00000027000000010000012c000000010000000e076578616d706c6504736c6f7000000000117777772e6578616d706c652e736c6f702e00000001000000010000012c0000000200000004c000020a00000004c0000214000000117777772e6578616d706c652e736c6f702e0000001c000000010000012c000000010000001020010db8000000000000000000000010",
+      "chunked_as": "frames snapshot_chunk_1 (example.slop.) and snapshot_chunk_2 (b.a.slop., a.slop.) in sync_signing_vectors.json",
+      "digest_hex": "f1a1fa4b8bbe101c951db6bf2dbf4a997a5dc25f6709ee1a4e290fbe12a35655",
+      "name": "three_zones_nested_and_all_basic_types",
+      "revision": 42,
+      "zones": [
+        {
+          "apex": "example.slop.",
+          "rrsets": [
+            {
+              "owner": "www.example.slop.",
+              "rdata_hex": [
+                "c0000214",
+                "c000020a"
+              ],
+              "rr_class": 1,
+              "ttl": 300,
+              "type": 1
+            },
+            {
+              "owner": "example.slop.",
+              "rdata_hex": [
+                "036e733107736c6f70646e7304736c6f70000a686f73746d617374657207736c6f70646e7304736c6f70000000000700000e1000000384001275000000012c"
+              ],
+              "rr_class": 1,
+              "ttl": 3600,
+              "type": 6
+            },
+            {
+              "owner": "example.slop.",
+              "rdata_hex": [
+                "036e733207736c6f70646e7304736c6f7000",
+                "036e733107736c6f70646e7304736c6f7000"
+              ],
+              "rr_class": 1,
+              "ttl": 3600,
+              "type": 2
+            },
+            {
+              "owner": "example.slop.",
+              "rdata_hex": [
+                "0014036d7832076578616d706c6504736c6f7000",
+                "000a036d7831076578616d706c6504736c6f7000"
+              ],
+              "rr_class": 1,
+              "ttl": 3600,
+              "type": 15
+            },
+            {
+              "owner": "example.slop.",
+              "rdata_hex": [
+                "0b763d73706631202d616c6c",
+                "0568656c6c6f05776f726c64"
+              ],
+              "rr_class": 1,
+              "ttl": 300,
+              "type": 16
+            },
+            {
+              "owner": "example.slop.",
+              "rdata_hex": [
+                "1268656c6c6f2066726f6d20736c6f70646e73",
+                "00"
+              ],
+              "rr_class": 1,
+              "ttl": 60,
+              "type": 65280
+            },
+            {
+              "owner": "*.example.slop.",
+              "rdata_hex": [
+                "c0000263"
+              ],
+              "rr_class": 1,
+              "ttl": 120,
+              "type": 1
+            },
+            {
+              "owner": "alias.example.slop.",
+              "rdata_hex": [
+                "03777777076578616d706c6504736c6f7000"
+              ],
+              "rr_class": 1,
+              "ttl": 300,
+              "type": 5
+            },
+            {
+              "owner": "_sip._tcp.example.slop.",
+              "rdata_hex": [
+                "000a003c13c403736970076578616d706c6504736c6f7000"
+              ],
+              "rr_class": 1,
+              "ttl": 300,
+              "type": 33
+            },
+            {
+              "owner": "legacy.example.slop.",
+              "rdata_hex": [
+                "076578616d706c6504736c6f7000"
+              ],
+              "rr_class": 1,
+              "ttl": 300,
+              "type": 39
+            },
+            {
+              "owner": "www.example.slop.",
+              "rdata_hex": [
+                "20010db8000000000000000000000010"
+              ],
+              "rr_class": 1,
+              "ttl": 300,
+              "type": 28
+            },
+            {
+              "owner": "example.slop.",
+              "rdata_hex": [
+                "deadbeef"
+              ],
+              "rr_class": 1,
+              "ttl": 300,
+              "type": 65534
+            }
+          ]
+        },
+        {
+          "apex": "b.a.slop.",
+          "rrsets": [
+            {
+              "owner": "b.a.slop.",
+              "rdata_hex": [
+                "036e733107736c6f70646e7304736c6f70000a686f73746d617374657207736c6f70646e7304736c6f70000000000100000e1000000384001275000000012c"
+              ],
+              "rr_class": 1,
+              "ttl": 3600,
+              "type": 6
+            },
+            {
+              "owner": "b.a.slop.",
+              "rdata_hex": [
+                "036e733107736c6f70646e7304736c6f7000"
+              ],
+              "rr_class": 1,
+              "ttl": 3600,
+              "type": 2
+            }
+          ]
+        },
+        {
+          "apex": "a.slop.",
+          "rrsets": [
+            {
+              "owner": "a.slop.",
+              "rdata_hex": [
+                "036e733107736c6f70646e7304736c6f7000"
+              ],
+              "rr_class": 1,
+              "ttl": 3600,
+              "type": 2
+            },
+            {
+              "owner": "a.slop.",
+              "rdata_hex": [
+                "036e733107736c6f70646e7304736c6f70000a686f73746d617374657207736c6f70646e7304736c6f70000000000300000e1000000384001275000000012c"
+              ],
+              "rr_class": 1,
+              "ttl": 3600,
+              "type": 6
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "canonical_preimage_hex": "00000000",
+      "digest_hex": "df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119",
+      "name": "empty_snapshot",
+      "revision": 0,
+      "zones": []
+    }
+  ]
+}

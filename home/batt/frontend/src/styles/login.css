@@ -1,0 +1,35 @@
+.login-page {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(var(--sq) * 1.5);
+  padding-top: calc(var(--sq) * 3);
+}
+
+.login-logo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.login-card {
+  width: 100%;
+  max-width: 400px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.login-card .btn {
+  margin-top: 6px;
+}
+
+@media (max-width: 640px) {
+  .login-page {
+    padding-top: calc(var(--sq) * 1.5);
+  }
+
+  .login-logo h1 {
+    font-size: 2.4rem;
+  }
+}

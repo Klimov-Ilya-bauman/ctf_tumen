@@ -1,0 +1,16 @@
+version: v2
+modules:
+  - path: proto
+lint:
+  use:
+    - STANDARD
+  ignore_only:
+    RPC_REQUEST_STANDARD_NAME:
+      - proto/slopdns/sync/v1/sync.proto
+    RPC_RESPONSE_STANDARD_NAME:
+      - proto/slopdns/sync/v1/sync.proto
+    RPC_REQUEST_RESPONSE_UNIQUE:
+      - proto/slopdns/sync/v1/sync.proto
+breaking:
+  use:
+    - FILE

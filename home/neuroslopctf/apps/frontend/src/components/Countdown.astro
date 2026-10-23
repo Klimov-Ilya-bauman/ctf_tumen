@@ -1,0 +1,9 @@
+---
+interface Props {target:string}
+const {target}=Astro.props;
+---
+<div class="card v2-section" data-countdown-root data-target-date={target} hidden>
+ <div class="eyebrow">Обратный отсчёт</div>
+ <h2 data-countdown-title>До следующего этапа</h2><p class="field-hint" data-countdown-hint>Оставшееся время рассчитывается в браузере.</p>
+ <p data-countdown-meta role="timer">Уточняем время</p>
+</div>

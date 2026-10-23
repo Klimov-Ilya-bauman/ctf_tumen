@@ -1,0 +1,9 @@
+**
+!api/openapi.yaml
+!proto/testdata/**
+!web/frontend/**
+**/node_modules
+**/dist
+**/.mock-public
+web/frontend/ui/src/api/generated
+**/.DS_Store
