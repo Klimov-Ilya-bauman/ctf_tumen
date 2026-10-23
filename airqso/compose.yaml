@@ -1,0 +1,72 @@
+name: airqso
+
+services:
+  postgres:
+    platform: linux/amd64
+    image: postgres:18.6-alpine
+    environment:
+      POSTGRES_DB: airqso
+      POSTGRES_USER: airqso
+      POSTGRES_PASSWORD: "${AIRQSO_POSTGRES_PASSWORD:?set AIRQSO_POSTGRES_PASSWORD}"
+    volumes: ["airqso-db:/var/lib/postgresql"]
+    healthcheck: { test: [CMD-SHELL, "pg_isready -U airqso -d airqso"], interval: 2s, timeout: 2s, retries: 15 }
+    cpus: 0.45
+    mem_limit: 128m
+    restart: unless-stopped
+  migrate:
+    platform: linux/amd64
+    build: { context: ., dockerfile: Dockerfile, target: migrate }
+    environment:
+      AIRQSO_DATABASE_URL: "postgres://airqso:${AIRQSO_POSTGRES_PASSWORD}@postgres:5432/airqso?sslmode=disable"
+      AIRQSO_MIGRATIONS_DIR: /app/migrations
+    depends_on: { postgres: { condition: service_healthy } }
+    cpus: 0.10
+    mem_limit: 32m
+    restart: "no"
+  radiod:
+    platform: linux/amd64
+    build: { context: ., dockerfile: Dockerfile, target: radiod }
+    environment:
+      AIRQSO_RADIO_LISTEN_ADDRESS: :9000
+      AIRQSO_RADIO_ADDRESS: 127.0.0.1:9000
+      AIRQSO_RADIO_OBSERVER_ADDRESS: :9001
+      AIRQSO_RADIO_SERVICE_TOKEN: "${AIRQSO_RADIO_SERVICE_TOKEN:?set AIRQSO_RADIO_SERVICE_TOKEN}"
+      AIRQSO_OBSERVER_SECRET: ${AIRQSO_OBSERVER_SECRET:-}
+      AIRQSO_RADIO_TOPOLOGY_STATE_FILE: /var/lib/airqso/topology.state
+      AIRQSO_ARCHIVE_DIR: /var/lib/airqso/radio/archive
+      AIRQSO_CAPSULE_DIR: /var/lib/airqso/radio/capsules
+    volumes: ["airqso-radio:/var/lib/airqso"]
+    ports: ["${AIRQSO_OBSERVER_PORT:-9001}:9001"]
+    depends_on: { migrate: { condition: service_completed_successfully } }
+    healthcheck: { test: [CMD, /radioctl], interval: 2s, timeout: 2s, retries: 15 }
+    cpus: 0.20
+    mem_limit: 32m
+    restart: unless-stopped
+  web:
+    platform: linux/amd64
+    build: { context: ., dockerfile: Dockerfile, target: web }
+    environment:
+      AIRQSO_HTTP_ADDRESS: :8080
+      AIRQSO_DATABASE_URL: "postgres://airqso:${AIRQSO_POSTGRES_PASSWORD}@postgres:5432/airqso?sslmode=disable"
+      AIRQSO_RADIO_ADDRESS: radiod:9000
+      AIRQSO_RADIO_SERVICE_TOKEN: "${AIRQSO_RADIO_SERVICE_TOKEN:?set AIRQSO_RADIO_SERVICE_TOKEN}"
+      AIRQSO_MESSAGE_CIPHER_KEY: "${AIRQSO_MESSAGE_CIPHER_KEY:?set AIRQSO_MESSAGE_CIPHER_KEY}"
+      AIRQSO_OBSERVER_SECRET: ${AIRQSO_OBSERVER_SECRET:-}
+      AIRQSO_ARCHIVE_DIR: /var/lib/airqso-radio/radio/archive
+      AIRQSO_CAPSULE_DIR: /var/lib/airqso-radio/radio/capsules
+      AIRQSO_QSL_ASSET_DIR: /var/lib/airqso-assets
+      AIRQSO_STATIC_DIR: /app/static
+      AIRQSO_MAP_FILE: /app/static/map/russia.svg
+      AIRQSO_TOPOLOGY_FILE: /app/config/topology/topology.json
+      AIRQSO_COOKIE_SECURE: ${AIRQSO_COOKIE_SECURE:-false}
+      AIRQSO_BOTS_ENABLED: ${AIRQSO_BOTS_ENABLED:-true}
+      AIRQSO_METRICS_ADDRESS: :9090
+    volumes: ["airqso-radio:/var/lib/airqso-radio", "airqso-assets:/var/lib/airqso-assets"]
+    ports: ["${AIRQSO_WEB_PORT:-8080}:8080"]
+    depends_on: { migrate: { condition: service_completed_successfully }, radiod: { condition: service_started } }
+    healthcheck: { test: [CMD, /healthprobe, "http://127.0.0.1:8080/health/live"], interval: 2s, timeout: 2s, retries: 15 }
+    cpus: 0.35
+    mem_limit: 80m
+    restart: unless-stopped
+
+volumes: { airqso-db: {}, airqso-radio: {}, airqso-assets: {} }
