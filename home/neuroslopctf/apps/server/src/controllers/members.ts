@@ -13,10 +13,11 @@ import {
   pageQuery,
   paginate,
   requireUser,
+  requireTokenCompetition,
   type CompetitionContext,
   type Ctx,
 } from "../services/http.js";
-import { canManageMember } from "../services/permissions.js";
+import { canManageMember, grantableRoles } from "../services/permissions.js";
 import { lit } from "../services/sql.js";
 import { leaveTeam } from "../services/teams.js";
 import { user } from "../models/user.js";
@@ -59,6 +60,8 @@ export class MemberController {
       throw notFound("Competition");
     }
 
+    requireTokenCompetition(ctx, target.id);
+
     const existing = await membershipOf(target.id, user.id);
 
     if (existing) {
@@ -77,6 +80,8 @@ export class MemberController {
 
     if (body.invite_code) {
       const code = body.invite_code;
+      // Hold the invitation row until this request's transaction commits.
+      await orm.raw(`SELECT "code" FROM "invite" WHERE "code" = ${lit(code)} AND "competitionId" = ${lit(target.id)} FOR UPDATE`);
       const found = await sudo(() =>
         orm.fetch(
           query()
@@ -213,6 +218,15 @@ export class MemberController {
     const actor = requireUser(ctx);
     const target = await findMember(cc, ctx.params.uid);
     const body = await ctx.validBody(updateBody);
+
+    if (!canManageMember(cc.role, target)) {
+      throw new HttpError(403, "You can't manage this member", "forbidden");
+    }
+
+    if (body.role !== undefined && body.role !== target.role &&
+        body.role !== "owner" && !grantableRoles(cc.role).includes(body.role)) {
+      throw new HttpError(403, "You can't grant this role", "role_not_grantable");
+    }
 
     if (body.role !== undefined && body.role !== target.role) {
       if (body.role === "owner") {

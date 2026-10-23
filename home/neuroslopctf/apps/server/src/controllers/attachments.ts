@@ -13,7 +13,7 @@ import {
 } from "../services/http.js";
 import { lit } from "../services/sql.js";
 import { deleteFile, openFile, saveFile } from "../services/storage.js";
-import { loadTask } from "../services/tasks.js";
+import { loadTask, requireTaskPermission, taskById } from "../services/tasks.js";
 import { task as taskModel } from "../models/task.js";
 
 const MAX_FILE_SIZE = 20 * 1024 * 1024;
@@ -50,6 +50,7 @@ export class AttachmentController {
     const cc = await loadCompetition(ctx);
     const actor = requireUser(ctx);
     const tc = await loadTask(cc, ctx.params.tslug ?? "");
+    requireTaskPermission(tc, "task.attach");
 
     const form = await ctx.formData();
     const file = form.get("file");
@@ -125,6 +126,7 @@ export class AttachmentController {
     const cc = await loadCompetition(ctx);
     requireUser(ctx);
     const found = await findAttachment(cc, ctx.params.aid);
+    requireTaskPermission(await taskById(cc, found.taskId), "task.attach");
 
     const body = await ctx.validBody(updateBody);
     const [updated] = await orm.execute(
@@ -153,6 +155,7 @@ export class AttachmentController {
     const cc = await loadCompetition(ctx);
     const actor = requireUser(ctx);
     const found = await findAttachment(cc, ctx.params.aid);
+    requireTaskPermission(await taskById(cc, found.taskId), "task.attach");
 
     await orm.execute(
       query()

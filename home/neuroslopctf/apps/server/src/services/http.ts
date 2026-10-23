@@ -61,19 +61,7 @@ export async function loadCompetition(ctx: Ctx): Promise<CompetitionContext> {
     throw new HttpError(404, "Competition not found");
   }
 
-  const auth = authOf(ctx);
-
-  if (
-    auth.kind === "token" &&
-    auth.token.competitionId !== null &&
-    auth.token.competitionId !== competition.id
-  ) {
-    throw new HttpError(
-      403,
-      "API token is bound to another competition",
-      "token_competition_mismatch",
-    );
-  }
+  requireTokenCompetition(ctx, competition.id);
 
   const user = currentUser(ctx);
   const membership = user ? await membershipOf(competition.id, user.id) : null;
@@ -85,6 +73,15 @@ export async function loadCompetition(ctx: Ctx): Promise<CompetitionContext> {
     permissions: competitionPermissions(competition, membership),
     user,
   };
+}
+
+export function requireTokenCompetition(ctx: Ctx, competitionId: number) {
+  const auth = authOf(ctx);
+  if (auth.kind === "token" && auth.token.competitionId !== null &&
+      auth.token.competitionId !== competitionId) {
+    throw new HttpError(403, "API token is bound to another competition",
+      "token_competition_mismatch");
+  }
 }
 
 export async function membershipOf(

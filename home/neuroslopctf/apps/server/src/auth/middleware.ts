@@ -49,6 +49,26 @@ function lookup<TResult>(callback: () => Promise<TResult>): Promise<TResult> {
 
 export const authenticate: Middleware<User> = async (ctx, next) => {
   const header = ctx.request.headers.authorization;
+  ctx.response.headers["cache-control"] = "no-store";
+  ctx.response.headers["x-content-type-options"] = "nosniff";
+
+  if (!["GET", "HEAD", "OPTIONS"].includes(ctx.request.method) &&
+      !header?.toLowerCase().startsWith("bearer ")) {
+    const origin = ctx.request.headers.origin;
+    let sameOrigin = true;
+    if (origin !== undefined) {
+      try {
+        const parsed = new URL(origin);
+        sameOrigin = ["http:", "https:"].includes(parsed.protocol) &&
+          parsed.host === ctx.request.headers.host;
+      } catch {
+        sameOrigin = false;
+      }
+    }
+    if (!sameOrigin || ctx.request.headers["sec-fetch-site"] === "cross-site") {
+      throw new HttpError(403, "Cross-site request denied", "invalid_origin");
+    }
+  }
 
   if (header?.toLowerCase().startsWith("bearer ")) {
     const raw = header.slice(7).trim();

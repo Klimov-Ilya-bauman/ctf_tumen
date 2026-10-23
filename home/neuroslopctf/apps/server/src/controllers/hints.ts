@@ -23,6 +23,7 @@ import {
   hintView,
   hintViews,
   loadTask,
+  requireTaskPermission,
   taskById,
 } from "../services/tasks.js";
 import { task as taskModel } from "../models/task.js";
@@ -54,6 +55,7 @@ export class HintController {
     const cc = await loadCompetition(ctx);
     const actor = requireUser(ctx);
     const tc = await loadTask(cc, ctx.params.tslug ?? "");
+    requireTaskPermission(tc, "task.edit");
 
     const body = await ctx.validBody(createBody);
     const [last] = await orm.raw<{ max: number | null }>(
@@ -90,6 +92,7 @@ export class HintController {
     const found = await findHint(cc, ctx.params.hid);
 
     const body = await ctx.validBody(updateBody);
+    requireTaskPermission(await taskById(cc, found.taskId), "task.edit");
     const [updated] = await orm.execute(
       query()
         .update(hint, body)
@@ -129,7 +132,7 @@ export class HintController {
     }
 
     try {
-      await orm.execute(
+      await orm.transaction((tx) => tx.execute(
         query().insert(hintUnlock, {
           hintId: found.id,
           userId: user.id,
@@ -137,7 +140,7 @@ export class HintController {
           competitionId: cc.competition.id,
           cost: found.cost,
         }),
-      );
+      ));
     } catch (error) {
       if (!(error instanceof ConflictError)) {
         throw error;

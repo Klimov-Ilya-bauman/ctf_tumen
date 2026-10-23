@@ -19,5 +19,5 @@ export function lit(value: string | number | boolean | Date | null): string {
     return `'${value.toISOString()}'::timestamptz`;
   }
 
-  return `'${value.replaceAll("'", "''")}'`;
+  return `E'${value.replaceAll("\\", "\\\\").replaceAll("'", "''")}'`;
 }

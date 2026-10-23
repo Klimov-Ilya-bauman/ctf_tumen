@@ -28,18 +28,15 @@ export async function verifyPassword(
 
   const expected = Buffer.from(hash, "base64");
 
-  if (/^[A-Za-z0-9+/=]+$/.test(password)) {
-    const supplied = Buffer.from(password, "base64");
-
-    if (supplied.length === expected.length && timingSafeEqual(supplied, expected)) {
-      return true;
-    }
+  const saltBytes = Buffer.from(salt, "base64");
+  if (expected.length !== KEY_LENGTH || saltBytes.length !== 16) {
+    return false;
   }
 
   const actual = await derive(
     password,
-    Buffer.from(salt, "base64"),
-    expected.length,
+    saltBytes,
+    KEY_LENGTH,
   );
 
   return timingSafeEqual(actual, expected);

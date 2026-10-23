@@ -1,5 +1,6 @@
 import { action, HttpError } from "@backend/thingamajig";
 import { orm } from "../app.js";
+import { authOf } from "../auth/middleware.js";
 import {
   loadCompetition,
   pageQuery,
@@ -87,19 +88,22 @@ export class SolveController {
   async mine(ctx: Ctx) {
     const user = requireUser(ctx);
     const page = ctx.validQuery(pageQuery);
-    const rows = await orm.raw<SolveRow>(solvesSql(user.id, "", page));
+    const auth = authOf(ctx);
+    const filter = auth.kind === "token" && auth.token.competitionId !== null
+      ? `AND s."competitionId" = ${lit(auth.token.competitionId)}` : "";
+    const rows = await orm.raw<SolveRow>(solvesSql(user.id, filter, page));
 
     return {
       items: rows.map(solveRecord),
-      total: rows[0] ? Number(rows[0].total) : await countMine(user.id),
+      total: rows[0] ? Number(rows[0].total) : await countMine(user.id, filter),
       ...page,
     };
   }
 }
 
-async function countMine(userId: number): Promise<number> {
+async function countMine(userId: number, filter: string): Promise<number> {
   const [row] = await orm.raw<{ count: string }>(
-    `SELECT COUNT(*) AS "count" FROM (${solvesSql(userId, "")}) solves`,
+    `SELECT COUNT(*) AS "count" FROM (${solvesSql(userId, filter)}) solves`,
   );
 
   return Number(row?.count ?? 0);

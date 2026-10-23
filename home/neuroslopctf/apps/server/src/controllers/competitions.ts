@@ -9,6 +9,7 @@ import {
   type Expression,
 } from "@backend/thingamajig";
 import { orm, sudo } from "../app.js";
+import { authOf } from "../auth/middleware.js";
 import { competition, type Competition } from "../models/competition.js";
 import { membership, type Membership } from "../models/membership.js";
 import { camelKeys } from "../services/case.js";
@@ -97,6 +98,12 @@ export class CompetitionController {
       .orderBy((c) => c.startsAt.value(), "desc")
       .orderBy((c) => c.id.value(), "desc");
 
+    const auth = authOf(ctx);
+    if (auth.kind === "token" && auth.token.competitionId !== null) {
+      const boundId = auth.token.competitionId;
+      select.where((c) => c.id.value().equals(value(boundId)));
+    }
+
     if (filters.q) {
       const pattern = `%${escapeLike(filters.q)}%`;
       select.where((c) =>
@@ -105,10 +112,7 @@ export class CompetitionController {
           .value()
           .ilike(value(pattern))
           .or(
-            c
-              .subselect(competition)
-              .where((d) => d.description.value().ilike(value(pattern)))
-              .exists(),
+            c.description.value().ilike(value(pattern)),
           ),
       );
     }
@@ -136,6 +140,10 @@ export class CompetitionController {
   @action("POST", "/competitions", { scope: "competitions:write" })
   async create(ctx: Ctx) {
     const owner = requireUser(ctx);
+    const auth = authOf(ctx);
+    if (auth.kind === "token" && auth.token.competitionId !== null) {
+      throw new HttpError(403, "A bound token cannot create competitions", "token_competition_mismatch");
+    }
     const body = camelKeys(await ctx.validBody(createCompetition));
 
     checkDates(body.startsAt, body.freezeAt ?? null, body.endsAt);

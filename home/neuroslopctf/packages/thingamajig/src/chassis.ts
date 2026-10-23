@@ -538,9 +538,9 @@ function applyError(response: WebResponse, error: unknown) {
   } else if (error instanceof ForbiddenError) {
     [status, detail, code] = [403, error.message, "forbidden"];
   } else if (error instanceof ConflictError) {
-    [status, detail, code] = [409, error.message, "conflict"];
+    [status, detail, code] = [409, "The operation conflicts with existing data", "conflict"];
   } else if (error instanceof ConstraintError) {
-    [status, detail, code] = [422, error.message, "constraint_violation"];
+    [status, detail, code] = [422, "The data violates a resource constraint", "constraint_violation"];
   } else {
     console.error(error);
     [status, detail, code] = [500, "Internal Server Error", "internal_error"];

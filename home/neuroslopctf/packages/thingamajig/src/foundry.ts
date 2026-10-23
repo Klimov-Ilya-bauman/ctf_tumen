@@ -37,10 +37,13 @@ export class SqlVisitor implements ExpressionVisitor<string> {
     } else if (value instanceof Date) {
       return `'${value.toISOString()}'`;
     } else if (typeof value === "string") {
-      return `'${value}'`;
-    } else {
+      return `E'${value.replaceAll("\\", "\\\\").replaceAll("'", "''")}'`;
+    } else if (typeof value === "boolean") {
+      return value ? "TRUE" : "FALSE";
+    } else if (typeof value === "number" && Number.isFinite(value)) {
       return String(value);
     }
+    throw new TypeError("Unsupported SQL value");
   }
 
   private mapComparator(comparator: ComparatorLiteral | MatchOperator): string {
