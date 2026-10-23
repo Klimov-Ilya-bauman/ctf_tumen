@@ -13,6 +13,8 @@ services:
     cpus: 0.45
     mem_limit: 128m
     restart: unless-stopped
+    networks: [internal]
+
   migrate:
     platform: linux/amd64
     build: { context: ., dockerfile: Dockerfile, target: migrate }
@@ -23,6 +25,8 @@ services:
     cpus: 0.10
     mem_limit: 32m
     restart: "no"
+    networks: [internal]
+
   radiod:
     platform: linux/amd64
     build: { context: ., dockerfile: Dockerfile, target: radiod }
@@ -36,12 +40,14 @@ services:
       AIRQSO_ARCHIVE_DIR: /var/lib/airqso/radio/archive
       AIRQSO_CAPSULE_DIR: /var/lib/airqso/radio/capsules
     volumes: ["airqso-radio:/var/lib/airqso"]
-    ports: ["${AIRQSO_OBSERVER_PORT:-9001}:9001"]
+    # Observer port NOT exposed externally
     depends_on: { migrate: { condition: service_completed_successfully } }
     healthcheck: { test: [CMD, /radioctl], interval: 2s, timeout: 2s, retries: 15 }
     cpus: 0.20
     mem_limit: 32m
     restart: unless-stopped
+    networks: [internal]
+
   web:
     platform: linux/amd64
     build: { context: ., dockerfile: Dockerfile, target: web }
@@ -60,7 +66,7 @@ services:
       AIRQSO_TOPOLOGY_FILE: /app/config/topology/topology.json
       AIRQSO_COOKIE_SECURE: ${AIRQSO_COOKIE_SECURE:-false}
       AIRQSO_BOTS_ENABLED: ${AIRQSO_BOTS_ENABLED:-true}
-      AIRQSO_METRICS_ADDRESS: :9090
+      AIRQSO_METRICS_ADDRESS: 127.0.0.1:9090
     volumes: ["airqso-radio:/var/lib/airqso-radio", "airqso-assets:/var/lib/airqso-assets"]
     ports: ["${AIRQSO_WEB_PORT:-8080}:8080"]
     depends_on: { migrate: { condition: service_completed_successfully }, radiod: { condition: service_started } }
@@ -68,5 +74,10 @@ services:
     cpus: 0.35
     mem_limit: 80m
     restart: unless-stopped
+    networks: [internal]
+
+networks:
+  internal:
+    driver: bridge
 
 volumes: { airqso-db: {}, airqso-radio: {}, airqso-assets: {} }
