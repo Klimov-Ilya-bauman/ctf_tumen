@@ -1,0 +1,22 @@
+npm notice run slopdns-ui@1.0.0 prebuild
+npm notice run npm run gen:api
+npm notice run slopdns-ui@1.0.0 gen:api
+npm notice run openapi-typescript ../../../api/openapi.yaml -o src/api/generated/schema.ts
+✨ openapi-typescript 7.13.0
+🚀 ../../../api/openapi.yaml → src/api/generated/schema.ts [48.7ms]
+npm notice run slopdns-ui@1.0.0 build
+npm notice run tsc --noEmit && vite build
+vite v7.3.7 building client environment for production...
+transforming...
+✓ 178 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                   0.39 kB │ gzip:   0.27 kB
+dist/assets/index-aInKjT1V.css    5.34 kB │ gzip:   1.66 kB
+dist/assets/index-DAzhH6jv.js   636.50 kB │ gzip: 192.17 kB
+
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 511ms

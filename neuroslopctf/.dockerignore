@@ -1,0 +1,9 @@
+**/node_modules
+**/dist
+**/.turbo
+.git
+**/.astro
+.env
+.pi-subagents
+artifacts
+data

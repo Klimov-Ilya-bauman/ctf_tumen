@@ -1,0 +1,39 @@
+# Optional secure ingress. Requires a Docker Compose version supporting !override.
+# docker compose -f compose.yaml -f compose.https.yaml up -d --build
+services:
+  iam:
+    environment:
+      SESSION_COOKIE_SECURE: "true"
+  frontend:
+    ports: !override []
+    networks: !override
+      web-edge: {}
+      tls-edge: {}
+    volumes:
+      - ./nginx-realip.conf:/etc/nginx/slopdns-realip/ingress.conf:ro
+  https-ingress:
+    image: nginxinc/nginx-unprivileged:stable-alpine
+    user: "101:101"
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    ports:
+      - "${HTTPS_PORT:-443}:8443"
+    volumes:
+      - ./nginx-https.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./tls:/etc/nginx/tls:ro
+    networks:
+      - public
+      - tls-edge
+    depends_on:
+      frontend:
+        condition: service_healthy
+
+networks:
+  tls-edge:
+    internal: true
+    ipam:
+      config:
+        - subnet: 172.30.247.0/24

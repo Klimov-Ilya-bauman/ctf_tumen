@@ -1,0 +1,51 @@
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: "${POSTGRES_ADMIN_PASSWORD:?Run ./scripts/setup-env.sh first}"
+      APP_DB_PASSWORD: "${POSTGRES_PASSWORD:?Run ./scripts/setup-env.sh first}"
+      POSTGRES_DB: neuroslopctf
+    volumes:
+      - db-data:/var/lib/postgresql/data
+      - ./scripts/db-init.sh:/docker-entrypoint-initdb.d/10-app-role.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d neuroslopctf"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 512m
+    pids_limit: 128
+
+  server:
+    build: .
+    environment:
+      DATABASE_URL: "postgres://neuroslopctf:${POSTGRES_PASSWORD:?Run ./scripts/setup-env.sh first}@db:5432/neuroslopctf"
+      PORT: 3000
+      DATA_DIR: /data
+      PUBLIC_ORIGIN: "${PUBLIC_ORIGIN:-}"
+      COOKIE_SECURE: "${COOKIE_SECURE:-false}"
+      NODE_OPTIONS: --max-old-space-size=384
+    volumes:
+      - server-data:/data
+    ports:
+      - "${BIND_ADDRESS:-0.0.0.0}:${SERVER_PORT:-9090}:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,noexec,nosuid,nodev
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 512m
+    pids_limit: 128
+
+volumes:
+  db-data:
+  server-data:

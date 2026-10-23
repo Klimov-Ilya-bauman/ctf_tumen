@@ -1,0 +1,146 @@
+{
+  "runId": "9ffb8b28",
+  "agent": "reviewer",
+  "task": "[Read from: /Users/anton/CTF/ural_final/slopdns/plan.md, /Users/anton/CTF/ural_final/slopdns/progress.md]\n\nRead-only final recheck ONLY of last issue from reviewer 52009acf in /Users/anton/CTF/ural_final/slopdns. Parent changed revokeOrg -> deleteServiceAccountWithLocks(ctx,tx,sa,locked); locked is explicitly nonnil even for empty initial set. serviceaccounts.go rejects any newly discovered user in own/onSA bindings before deleteAndBump; standalone delete helper gets nil (no prior locks). Added TestOrgRevocationRejectsLateServiceAccountUserLocks covering both initial empty/nonempty sets through real revokeOrg. Full -race suite with PG and vet passed. Inspect concrete code and test, report if original late SA lock expansion is closed or any blocker remains. No other broad audit/no source edits/no subagents.",
+  "exitCode": 0,
+  "processSignal": "SIGTERM",
+  "usage": {
+    "input": 14639,
+    "output": 1270,
+    "cacheRead": 50304,
+    "cacheWrite": 0,
+    "cost": 0.047008400000000006,
+    "turns": 7
+  },
+  "model": "openai-codex/gpt-6.1-sol:high",
+  "attemptedModels": [
+    "openai-codex/gpt-6.1-sol:high"
+  ],
+  "modelAttempts": [
+    {
+      "model": "openai-codex/gpt-6.1-sol:high",
+      "success": true,
+      "exitCode": 0,
+      "usage": {
+        "input": 14639,
+        "output": 1270,
+        "cacheRead": 50304,
+        "cacheWrite": 0,
+        "cost": 0.047008400000000006,
+        "turns": 7
+      }
+    }
+  ],
+  "durationMs": 51816,
+  "toolCount": 17,
+  "launchContractDigest": "69232eb0e8e4baa1debe7d586754010edb21a3cbe0eaddda2173a4ff1c958147",
+  "launchResolvedExtensions": {
+    "version": 1,
+    "source": "launch-resolved",
+    "disableAmbientExtensions": false,
+    "runtime": [
+      "sha256:de18c09cb3a1cf56"
+    ],
+    "configured": [],
+    "effective": [
+      "sha256:de18c09cb3a1cf56"
+    ],
+    "omitted": {
+      "runtime": 0,
+      "configured": 0,
+      "effective": 0
+    }
+  },
+  "acceptance": {
+    "status": "attested",
+    "evidenceStatus": "attested",
+    "explicit": false,
+    "effectiveAcceptance": {
+      "level": "attested",
+      "explicit": false,
+      "inferredReason": [
+        "read-only/reviewer-style agent"
+      ],
+      "criteria": [
+        {
+          "id": "criterion-1",
+          "must": "Return concrete findings with file paths and severity when applicable",
+          "evidence": [
+            "review-findings",
+            "residual-risks"
+          ],
+          "severity": "required"
+        }
+      ],
+      "evidence": [
+        "review-findings",
+        "residual-risks"
+      ],
+      "verify": [],
+      "stopRules": []
+    },
+    "inferredReason": [
+      "read-only/reviewer-style agent"
+    ],
+    "criteria": [
+      {
+        "id": "criterion-1",
+        "must": "Return concrete findings with file paths and severity when applicable",
+        "evidence": [
+          "review-findings",
+          "residual-risks"
+        ],
+        "severity": "required"
+      }
+    ],
+    "runtimeChecks": [],
+    "verifyRuns": [],
+    "childReport": {
+      "criteriaSatisfied": [
+        {
+          "id": "criterion-1",
+          "status": "satisfied",
+          "evidence": "Verified web/iam/internal/core/trusted.go:491,518 and serviceaccounts.go:237–244 prevent late user-lock expansion; security_test.go:86–95 covers empty/nonempty initial sets."
+        }
+      ],
+      "changedFiles": [],
+      "testsAddedOrUpdated": [],
+      "commandsRun": [
+        {
+          "command": "cd web && go test -race ./iam/internal/core -run 'TestOrgRevocation(RejectsLateServiceAccountUserLocks|RestartsRatherThanExpandingUserLocks)$' -count=1 -v",
+          "result": "passed",
+          "summary": "Both focused regression tests passed."
+        },
+        {
+          "command": "git diff --cached --stat",
+          "result": "passed",
+          "summary": "No staged files."
+        }
+      ],
+      "validationOutput": [
+        "Original late service-account lock expansion is closed.",
+        "Read-only review; no source edits."
+      ],
+      "residualRisks": [
+        "Focused regression uses a transaction double; full PostgreSQL suite and vet results remain parent-attested."
+      ],
+      "noStagedFiles": true,
+      "diffSummary": "Reviewed bounded service-account cleanup guard and its regression test; made no changes.",
+      "reviewFindings": [
+        "No blockers within the requested scope.",
+        "Correct: web/iam/internal/core/serviceaccounts.go:237–244 rejects late users before deleteAndBump.",
+        "Correct: web/iam/internal/core/trusted.go:491,518 preserves the guard for an empty initial lock set."
+      ],
+      "manualNotes": "Requested plan.md and progress.md were absent."
+    }
+  },
+  "effects": {
+    "fileMutation": {
+      "status": "not-applicable",
+      "expected": false,
+      "attempted": false
+    }
+  },
+  "transcriptPath": "/Users/anton/CTF/ural_final/slopdns/.pi-subagents/artifacts/9ffb8b28_reviewer_0_transcript.jsonl",
+  "timestamp": 1792734743867
+}

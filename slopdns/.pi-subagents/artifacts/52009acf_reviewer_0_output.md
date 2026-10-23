@@ -1,0 +1,4 @@
+## Review
+- Correct: MFA reservation precedes verification (`web/iam/internal/core/tokens.go:100–113`); focused race tests and vet pass.
+- **Blocker [P2]:** `web/iam/internal/core/trusted.go:518` still permits lock-set expansion through service-account cleanup. `deleteServiceAccount` rereads bindings (`serviceaccounts.go:225–229`), then acquires their user locks (`service.go:300`). A lower-ID user granted access after the guarded snapshot can invert `TransferOwnership`’s lock order (`trusted.go:575`), retaining the deadlock. Cleanup must also reject newly discovered users.
+- Note: The regression at `core/security_test.go:54` covers snapshot expansion, not subsequent service-account cleanup.

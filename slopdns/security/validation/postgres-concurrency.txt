@@ -1,0 +1,10 @@
+=== RUN   TestPostgresAccountBudgetConcurrentAndCooldown
+--- PASS: TestPostgresAccountBudgetConcurrentAndCooldown (0.14s)
+=== RUN   TestPostgresOwnerPromotionProtectsStaleMutations
+=== RUN   TestPostgresOwnerPromotionProtectsStaleMutations/update
+=== RUN   TestPostgresOwnerPromotionProtectsStaleMutations/delete
+--- PASS: TestPostgresOwnerPromotionProtectsStaleMutations (0.23s)
+    --- PASS: TestPostgresOwnerPromotionProtectsStaleMutations/update (0.11s)
+    --- PASS: TestPostgresOwnerPromotionProtectsStaleMutations/delete (0.11s)
+PASS
+ok  	slopdns/web/iam/internal/store/pgstore	1.390s
