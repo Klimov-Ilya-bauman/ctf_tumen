@@ -44,6 +44,14 @@ func isParticipant(g *store.Game, uid int64) bool {
 	return g.BlackID == uid || (g.WhiteID != nil && *g.WhiteID == uid)
 }
 
+func requireParticipant(w http.ResponseWriter, r *http.Request, g *store.Game) bool {
+	if !isParticipant(g, userID(r)) {
+		writeErr(w, http.StatusForbidden, "not a participant")
+		return false
+	}
+	return true
+}
+
 func (a *API) userRef(ctx context.Context, id int64, withKey bool) (*userRef, error) {
 	u, err := a.Store.UserByID(ctx, id)
 	if err != nil {
@@ -58,19 +66,31 @@ func (a *API) userRef(ctx context.Context, id int64, withKey bool) (*userRef, er
 }
 
 func (a *API) players(ctx context.Context, g *store.Game, withKey bool) (black, white *userRef, err error) {
-	if black, err = a.userRef(ctx, g.BlackID, withKey); err != nil {
+	if black, err = a.userRef(ctx, g.BlackID, false); err != nil {
 		return nil, nil, err
 	}
 	if g.WhiteID != nil {
-		if white, err = a.userRef(ctx, *g.WhiteID, withKey); err != nil {
+		if white, err = a.userRef(ctx, *g.WhiteID, false); err != nil {
 			return nil, nil, err
+		}
+	}
+	if withKey {
+		key := b64(g.BlackPubkey)
+		black.PubkeyB64 = &key
+		if white != nil {
+			key := b64(g.WhitePubkey)
+			white.PubkeyB64 = &key
 		}
 	}
 	return black, white, nil
 }
 
 func (a *API) listGames(w http.ResponseWriter, r *http.Request) {
-	games, err := a.Store.ListGames(r.Context())
+	page, ok := pagination(w, r, "before")
+	if !ok {
+		return
+	}
+	games, err := a.Store.ListGames(r.Context(), page.Cursor, page.Limit)
 	if err != nil {
 		writeStoreErr(w, err)
 		return
@@ -82,7 +102,7 @@ func (a *API) listGames(w http.ResponseWriter, r *http.Request) {
 			writeStoreErr(w, err)
 			return
 		}
-		out = append(out, map[string]any{"id": games[i].ID, "black": black, "white": white, "status": games[i].Status})
+		out = append(out, map[string]any{"id": games[i].ID, "black": black, "white": white, "status": games[i].Status, "can_view": isParticipant(&games[i], userID(r))})
 	}
 	writeJSON(w, http.StatusOK, out)
 }
@@ -101,23 +121,12 @@ func optionalPubkey(w http.ResponseWriter, r *http.Request) ([]byte, bool) {
 	return pub, true
 }
 
-func (a *API) storePubkey(w http.ResponseWriter, r *http.Request, pub []byte) bool {
-	if pub == nil {
-		return true
-	}
-	if err := a.Store.SetPubkey(r.Context(), userID(r), pub); err != nil {
-		writeStoreErr(w, err)
-		return false
-	}
-	return true
-}
-
 func (a *API) createGame(w http.ResponseWriter, r *http.Request) {
 	pub, ok := optionalPubkey(w, r)
-	if !ok || !a.storePubkey(w, r, pub) {
+	if !ok {
 		return
 	}
-	id, err := a.Store.CreateGame(r.Context(), userID(r))
+	id, err := a.Store.CreateGame(r.Context(), userID(r), pub)
 	if err != nil {
 		writeStoreErr(w, err)
 		return
@@ -125,7 +134,7 @@ func (a *API) createGame(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, map[string]int64{"game_id": id})
 }
 
-// The pubkey is stored only after the join succeeds, so a 409 leaves it untouched.
+// Joining and key snapshotting commit atomically; a 409 leaves both untouched.
 func (a *API) joinGame(w http.ResponseWriter, r *http.Request) {
 	g, ok := a.loadGame(w, r)
 	if !ok {
@@ -135,11 +144,8 @@ func (a *API) joinGame(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if err := a.Store.JoinGame(r.Context(), g.ID, userID(r)); err != nil {
+	if err := a.Store.JoinGame(r.Context(), g.ID, userID(r), pub); err != nil {
 		writeStoreErr(w, err)
-		return
-	}
-	if !a.storePubkey(w, r, pub) {
 		return
 	}
 	writeJSON(w, http.StatusOK, struct{}{})
@@ -147,7 +153,7 @@ func (a *API) joinGame(w http.ResponseWriter, r *http.Request) {
 
 func (a *API) getGame(w http.ResponseWriter, r *http.Request) {
 	g, ok := a.loadGame(w, r)
-	if !ok {
+	if !ok || !requireParticipant(w, r, g) {
 		return
 	}
 	black, white, err := a.players(r.Context(), g, true)
@@ -185,17 +191,16 @@ func (a *API) move(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &req) {
 		return
 	}
+	if req.Version == nil || *req.Version < 0 {
+		writeErr(w, http.StatusBadRequest, "version is required and must be nonnegative")
+		return
+	}
 	board, err := base64.StdEncoding.DecodeString(req.BoardCB64)
 	if err != nil || len(board) != boardLen {
 		writeErr(w, http.StatusBadRequest, "board_c_b64 must decode to 361 bytes")
 		return
 	}
-	// Legacy callers still receive a CAS against the snapshot read above.
-	version := g.Version
-	if req.Version != nil {
-		version = *req.Version
-	}
-	if err := a.Store.ApplyMove(r.Context(), g.ID, userID(r), version, board); err != nil {
+	if err := a.Store.ApplyMove(r.Context(), g.ID, userID(r), *req.Version, board); err != nil {
 		writeStoreErr(w, err)
 		return
 	}

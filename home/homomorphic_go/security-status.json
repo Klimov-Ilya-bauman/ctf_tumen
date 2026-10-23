@@ -1,0 +1,110 @@
+{
+  "recorded_at": "2026-10-23T07:40:06Z",
+  "state": "WAITING_FOR_USER",
+  "base_commit": "1b1361467c84a2e3d902919c01db188c3c5ac188",
+  "config_commit": null,
+  "deployed": false,
+  "pushed": false,
+  "decisions": [
+    {
+      "question_id": "blue-session-001",
+      "answer": "User delegated session duration selection so ordinary games and core functions can complete. Selected absolute 12h, configurable through SESSION_TTL; not a verified CTF timing parameter.",
+      "answered_by": "user (selection delegated to assistant)",
+      "answered_at": null,
+      "answer_source": "Current conversation: session should expire after an appropriate time for playing and exercising core functionality",
+      "applied_to": [
+        "backend/cmd/server/main.go",
+        "backend/httpapi/auth_handlers.go"
+      ],
+      "config_commit": null
+    },
+    {
+      "question_id": "crypto-compatibility-001",
+      "answer": "User instructed: fix all listed findings locally; user will push. Participant-only reads and independent hardening are authorized. Server key trust and legacy ciphertext migration still require an explicit choice.",
+      "answered_by": "user",
+      "answered_at": null,
+      "answer_source": "Current conversation: fix all listed findings; user will upload changes",
+      "applied_to": [
+        "backend/httpapi/game_handlers.go",
+        "backend/httpapi/game_messages.go",
+        "frontend/js/pages/lobby.js"
+      ],
+      "config_commit": null
+    }
+  ],
+  "implemented": [
+    "Participant-only GET game, move history and messages",
+    "Mandatory nonnegative move version, atomic database actor/status/turn/CAS checks",
+    "Per-game frozen public-key snapshots, atomic create/join/account-key update",
+    "Private-key history for browser account-key rotation",
+    "Cursor pagination with a maximum of 100 records per response",
+    "Incremental chat polling with a bounded 500-record display",
+    "Bounded expired/revoked/legacy session cleanup",
+    "Independent Secure cookie configuration, request/connection timeouts",
+    "Browser-origin checks and rejection of trailing JSON values",
+    "nginx per-client login/registration limits"
+  ],
+  "runtime_verified": {
+    "go": "go1.27.3 windows/amd64",
+    "go_archive_sha256": "f26081f438319757f8a1b46d7d0b2c5ec7583d4038e485e0aa725cfde7885fff",
+    "postgres": "18.4, isolated local test cluster",
+    "download_source": "https://go.dev/dl/?mode=json&include=all"
+  },
+  "verified_tests": [
+    {
+      "command": "go test -v ./...",
+      "exit_code": 0,
+      "scope": "TEST_DATABASE_URL explicitly set to isolated local PostgreSQL; no skipped integration tests. HTTP lifecycle, ACL, version, snapshot, rollback, concurrency, pagination, legacy migration, session lifecycle/cleanup"
+    },
+    {
+      "command": "go vet ./...",
+      "exit_code": 0
+    },
+    {
+      "command": "go build -o <workspace .local-tools output> ./cmd/server",
+      "exit_code": 0
+    },
+    {
+      "command": "node --test tests/client-security.test.mjs tests/crypto-audit.test.mjs",
+      "exit_code": 0,
+      "passed": 4,
+      "scope": "Synthetic data only; crypto audit confirms an UNFIXED weakness, not its remediation"
+    },
+    {
+      "command": "git diff --check",
+      "exit_code": 0
+    }
+  ],
+  "not_executed": [
+    "nginx configuration execution",
+    "browser UI E2E",
+    "production deployment",
+    "external attacks",
+    "jury submission"
+  ],
+  "flag_storage": "UNKNOWN: checker/specification not available",
+  "remaining_risks": [
+    "Legacy GF(251) key exchange has a 250-value secret domain",
+    "Legacy board ciphertext can reveal the shared chat secret",
+    "Server still accepts a client-calculated board; full game-rule validation is pending protocol decision",
+    "Legacy key snapshots can only preserve currently stored keys, not recover previously overwritten keys",
+    "No confirmed migration strategy for old encrypted boards/messages",
+    "Production TLS termination is UNKNOWN; local compose intentionally uses HTTP with Secure cookie disabled",
+    "nginx limits have not been runtime-tested; values are engineering defaults, not CTF rules"
+  ],
+  "waiting_tasks": [
+    {
+      "task_id": "protocol-v2",
+      "question_id": "protocol-v2-001",
+      "state": "WAITING_FOR_USER",
+      "needs": "Choose server-accessible keys plus authoritative board versus strict E2E encryption; approve legacy read-only/migration policy"
+    },
+    {
+      "task_id": "flag-confidentiality-verification",
+      "question_id": "review-checker-001",
+      "state": "WAITING_FOR_USER",
+      "needs": "Checker or official flag storage/compatibility requirements"
+    }
+  ],
+  "notes_file": "SECURITY_NOTES.txt"
+}

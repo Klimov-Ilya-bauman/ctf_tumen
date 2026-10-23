@@ -1,0 +1,57 @@
+Local hardening status (changes after commit 1b13614)
+
+Implemented:
+- Sensitive game reads require participation. Public game listings no longer offer
+  an Open link for unrelated accounts. Waiting games can still be joined.
+- Move version is mandatory. Existing atomic actor/status/turn/version guards remain.
+- Account public keys are snapshotted per game. Create/join and key updates commit
+  together; failed joins roll back the account-key update as well.
+- Existing games snapshot CURRENT account keys once on migration. This cannot
+  reconstruct an original key that was already overwritten before this patch.
+- Browser private keys are archived on rotation so existing game snapshots remain
+  usable in that browser. No recovery of previously lost private keys is possible.
+- Games use before=<game_id>; moves/messages use after=<seq_or_message_id>.
+  Each endpoint returns at most 100 records, with limit in [1,100]. Responses stay
+  arrays. Messages now include id. The lobby has page navigation and chat polling
+  uses incremental cursors; the visible chat retains the last 500 fetched records.
+- Expired/revoked/legacy sessions are deleted in bounded batches every minute.
+- HTTP request/body/header/idle timeouts and bounded bodies/headers are configured.
+- Cross-origin browser writes are rejected unless explicitly allowed. A request
+  body must contain exactly one JSON value.
+- nginx limits login to 30 requests/minute/IP with burst 10, registration to
+  10 requests/minute/IP with burst 5. These are defensive engineering settings,
+  NOT verified tournament limits. Adjust for the actual NAT/checker environment.
+  Limits require nginx; do not publish the backend port directly.
+
+Transport:
+- Backend SESSION_COOKIE_SECURE defaults to true, independently of proxy TLS.
+- Included compose explicitly defaults it to false for its plain-HTTP LOCAL setup.
+  Production requires HTTPS and SESSION_COOKIE_SECURE=true. TLS certificates,
+  external hostname, deployment policy and actual TLS termination remain UNKNOWN.
+- SESSION_TTL defaults to 12h and is configurable. It is an absolute session life.
+
+NOT completed / WAITING_FOR_USER (protocol-v2-001):
+- Replacing the weak GF(251) key exchange and board encryption.
+- Separating chat keys from board-derived secrets.
+- Server-authoritative move calculation, including all agreed Go rules.
+- Selecting a safe migration/read-only policy for legacy games and ciphertext.
+
+These changes are deliberately not described as complete flag protection.
+Legacy crypto still allows secret enumeration and key leakage from board data.
+Checker and flag storage specification are unavailable.
+
+Validation performed using Go 1.27.3 and an isolated LOCAL PostgreSQL 18.4:
+- go test -v ./... with TEST_DATABASE_URL set: PASS, no skipped integration tests.
+- go vet ./...: PASS.
+- go build ./cmd/server (output outside source tree): PASS.
+- node --test tests/client-security.test.mjs tests/crypto-audit.test.mjs: 4 PASS.
+  The crypto-audit test is a demonstration of an UNFIXED vulnerability.
+- JavaScript syntax and git diff --check: PASS.
+- nginx configuration execution, browser UI E2E and deployment: NOT_EXECUTED.
+
+For a repeatable full backend check, TEST_DATABASE_URL must point to a disposable
+authorized local PostgreSQL database. Tests create and drop only their own random
+schemas, and use synthetic users/data. Without TEST_DATABASE_URL, Go integration
+tests SKIP; a green unit-only result must not be called a full security validation.
+
+No commit, push, production deployment, external attack, or jury submission made.

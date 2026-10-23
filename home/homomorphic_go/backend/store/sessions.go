@@ -20,3 +20,12 @@ func (s *Store) DeleteSession(ctx context.Context, hash string) error {
 	_, err := s.Pool.Exec(ctx, `DELETE FROM sessions WHERE token=$1`, hash)
 	return mapErr(err)
 }
+
+// PurgeSessions removes a bounded batch without logging any session material.
+func (s *Store) PurgeSessions(ctx context.Context) error {
+	_, err := s.Pool.Exec(ctx, `DELETE FROM sessions WHERE token IN (
+		SELECT token FROM sessions
+		WHERE expires_at IS NULL OR expires_at<=now() OR revoked_at IS NOT NULL
+		LIMIT 1000 FOR UPDATE SKIP LOCKED)`)
+	return mapErr(err)
+}

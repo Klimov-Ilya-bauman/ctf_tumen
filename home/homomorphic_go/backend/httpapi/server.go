@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -20,21 +22,22 @@ type StoreIface interface {
 	UserByUsername(ctx context.Context, username string) (*store.User, error)
 	UserByID(ctx context.Context, id int64) (*store.User, error)
 	SetPubkey(ctx context.Context, userID int64, pub []byte) error
-	CreateGame(ctx context.Context, blackID int64) (int64, error)
-	JoinGame(ctx context.Context, gameID, whiteID int64) error
+	CreateGame(ctx context.Context, blackID int64, pub []byte) (int64, error)
+	JoinGame(ctx context.Context, gameID, whiteID int64, pub []byte) error
 	GetGame(ctx context.Context, id int64) (*store.Game, error)
-	ListGames(ctx context.Context) ([]store.Game, error)
+	ListGames(ctx context.Context, before int64, limit int) ([]store.Game, error)
 	ApplyMove(ctx context.Context, gameID, userID, version int64, boardC []byte) error
-	Moves(ctx context.Context, gameID int64) ([]store.Move, error)
+	Moves(ctx context.Context, gameID, after int64, limit int) ([]store.Move, error)
 	AddMessage(ctx context.Context, gameID, senderID int64, ct string) error
-	Messages(ctx context.Context, gameID int64) ([]store.Message, error)
+	Messages(ctx context.Context, gameID, after int64, limit int) ([]store.Message, error)
 }
 
 type API struct {
-	Store       StoreIface
-	Tokens      *auth.Tokens
-	AllowOrigin string
-	SessionTTL  time.Duration
+	Store         StoreIface
+	Tokens        *auth.Tokens
+	AllowOrigin   string
+	SessionTTL    time.Duration
+	SecureCookies bool
 }
 
 const maxBody = 64 << 10
@@ -62,6 +65,21 @@ func (a *API) Routes() http.Handler {
 
 func (a *API) cors(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		if r.Method != http.MethodGet && r.Method != http.MethodHead && r.Method != http.MethodOptions {
+			origin := r.Header.Get("Origin")
+			if origin != "" {
+				u, err := url.Parse(origin)
+				sameHost := err == nil && u.User == nil && u.Host == r.Host && (u.Scheme == "http" || u.Scheme == "https") && u.Path == "" && u.RawQuery == "" && u.Fragment == ""
+				if !sameHost && !a.originAllowed(origin) {
+					writeErr(w, http.StatusForbidden, "origin not allowed")
+					return
+				}
+			} else if r.Header.Get("Sec-Fetch-Site") == "cross-site" {
+				writeErr(w, http.StatusForbidden, "cross-site request not allowed")
+				return
+			}
+		}
 		if origin := r.Header.Get("Origin"); origin != "" && a.originAllowed(origin) {
 			h := w.Header()
 			h.Set("Access-Control-Allow-Origin", origin)
@@ -114,8 +132,13 @@ func writeStoreErr(w http.ResponseWriter, err error) {
 
 func decodeJSON(w http.ResponseWriter, r *http.Request, v any) bool {
 	r.Body = http.MaxBytesReader(w, r.Body, maxBody)
-	if err := json.NewDecoder(r.Body).Decode(v); err != nil {
+	decoder := json.NewDecoder(r.Body)
+	if err := decoder.Decode(v); err != nil {
 		writeErr(w, http.StatusBadRequest, "malformed JSON")
+		return false
+	}
+	if err := decoder.Decode(new(any)); err != io.EOF {
+		writeErr(w, http.StatusBadRequest, "body must contain one JSON value")
 		return false
 	}
 	return true

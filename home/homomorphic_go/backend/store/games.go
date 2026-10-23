@@ -14,6 +14,8 @@ type Game struct {
 	BoardC      []byte
 	Turn        int16
 	Version     int64
+	BlackPubkey []byte
+	WhitePubkey []byte
 }
 
 type Move struct {
@@ -23,42 +25,94 @@ type Move struct {
 }
 
 type Message struct {
+	ID         int64
 	SenderID   int64
 	Ciphertext string
 	CreatedAt  time.Time
 }
 
-const gameCols = `id, black_id, white_id, status, board_c, turn, version`
+const gameCols = `id, black_id, white_id, status, board_c, turn, version, black_pubkey, white_pubkey`
 
 func scanGame(row pgx.Row) (Game, error) {
 	var g Game
-	err := row.Scan(&g.ID, &g.BlackID, &g.WhiteID, &g.Status, &g.BoardC, &g.Turn, &g.Version)
+	err := row.Scan(&g.ID, &g.BlackID, &g.WhiteID, &g.Status, &g.BoardC, &g.Turn, &g.Version, &g.BlackPubkey, &g.WhitePubkey)
 	return g, err
 }
 
-func (s *Store) CreateGame(ctx context.Context, blackID int64) (int64, error) {
+// gameKey serializes account-key changes with creation/join and snapshots the key.
+func gameKey(ctx context.Context, tx pgx.Tx, userID int64, supplied []byte) ([]byte, error) {
+	var key []byte
+	if err := tx.QueryRow(ctx, `SELECT pubkey FROM users WHERE id=$1 FOR UPDATE`, userID).Scan(&key); err != nil {
+		return nil, mapErr(err)
+	}
+	if supplied != nil {
+		key = supplied
+	}
+	if !validGameKey(key) {
+		return nil, ErrConflict
+	}
+	if supplied != nil {
+		if _, err := tx.Exec(ctx, `UPDATE users SET pubkey=$1 WHERE id=$2`, key, userID); err != nil {
+			return nil, mapErr(err)
+		}
+	}
+	return key, nil
+}
+
+func validGameKey(key []byte) bool {
+	if len(key) != 19 {
+		return false
+	}
+	for _, v := range key {
+		if v == 0 || v >= 251 {
+			return false
+		}
+	}
+	return true
+}
+
+func (s *Store) CreateGame(ctx context.Context, blackID int64, pub []byte) (int64, error) {
+	tx, err := s.Pool.Begin(ctx)
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback(ctx)
+	key, err := gameKey(ctx, tx, blackID, pub)
+	if err != nil {
+		return 0, err
+	}
 	var id int64
-	err := s.Pool.QueryRow(ctx,
-		`INSERT INTO games(black_id, status) VALUES($1,'waiting') RETURNING id`,
-		blackID).Scan(&id)
+	err = tx.QueryRow(ctx,
+		`INSERT INTO games(black_id, status, black_pubkey, keys_frozen) VALUES($1,'waiting',$2,true) RETURNING id`,
+		blackID, key).Scan(&id)
 	if err != nil {
 		return 0, mapErr(err)
 	}
-	return id, nil
+	return id, mapErr(tx.Commit(ctx))
 }
 
-func (s *Store) JoinGame(ctx context.Context, gameID, whiteID int64) error {
-	tag, err := s.Pool.Exec(ctx,
-		`UPDATE games SET white_id=$1,status='active',version=version+1 WHERE id=$2 AND white_id IS NULL AND status='waiting' AND black_id<>$1`,
-		whiteID, gameID)
+func (s *Store) JoinGame(ctx context.Context, gameID, whiteID int64, pub []byte) error {
+	tx, err := s.Pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	key, err := gameKey(ctx, tx, whiteID, pub)
+	if err != nil {
+		return err
+	}
+	tag, err := tx.Exec(ctx,
+		`UPDATE games SET white_id=$1,status='active',version=version+1,white_pubkey=$3
+		 WHERE id=$2 AND white_id IS NULL AND status='waiting' AND black_id<>$1
+		 AND black_pubkey IS NOT NULL`, whiteID, gameID, key)
 	if err != nil {
 		return mapErr(err)
 	}
 	if tag.RowsAffected() > 0 {
-		return nil
+		return mapErr(tx.Commit(ctx))
 	}
 	var one int
-	if err := s.Pool.QueryRow(ctx, `SELECT 1 FROM games WHERE id=$1`, gameID).Scan(&one); err != nil {
+	if err := tx.QueryRow(ctx, `SELECT 1 FROM games WHERE id=$1`, gameID).Scan(&one); err != nil {
 		return mapErr(err)
 	}
 	return ErrConflict
@@ -72,8 +126,11 @@ func (s *Store) GetGame(ctx context.Context, id int64) (*Game, error) {
 	return &g, nil
 }
 
-func (s *Store) ListGames(ctx context.Context) ([]Game, error) {
-	rows, err := s.Pool.Query(ctx, `SELECT `+gameCols+` FROM games ORDER BY id DESC`)
+func (s *Store) ListGames(ctx context.Context, before int64, limit int) ([]Game, error) {
+	if before < 0 || limit < 1 || limit > 100 {
+		return nil, ErrConflict
+	}
+	rows, err := s.Pool.Query(ctx, `SELECT `+gameCols+` FROM games WHERE ($1::bigint=0 OR id<$1) ORDER BY id DESC LIMIT $2`, before, limit)
 	if err != nil {
 		return nil, mapErr(err)
 	}
@@ -118,9 +175,12 @@ func (s *Store) ApplyMove(ctx context.Context, gameID, userID, version int64, bo
 	return tx.Commit(ctx)
 }
 
-func (s *Store) Moves(ctx context.Context, gameID int64) ([]Move, error) {
+func (s *Store) Moves(ctx context.Context, gameID, after int64, limit int) ([]Move, error) {
+	if after < 0 || limit < 1 || limit > 100 {
+		return nil, ErrConflict
+	}
 	rows, err := s.Pool.Query(ctx,
-		`SELECT seq, board_c, created_at FROM moves WHERE game_id=$1 ORDER BY seq ASC`, gameID)
+		`SELECT seq, board_c, created_at FROM moves WHERE game_id=$1 AND seq>$2 ORDER BY seq ASC LIMIT $3`, gameID, after, limit)
 	if err != nil {
 		return nil, mapErr(err)
 	}
@@ -137,16 +197,26 @@ func (s *Store) Moves(ctx context.Context, gameID int64) ([]Move, error) {
 }
 
 func (s *Store) AddMessage(ctx context.Context, gameID, senderID int64, ct string) error {
-	_, err := s.Pool.Exec(ctx,
-		`INSERT INTO messages(game_id, sender_id, ciphertext) VALUES($1,$2,$3)`,
+	tag, err := s.Pool.Exec(ctx,
+		`INSERT INTO messages(game_id, sender_id, ciphertext)
+		 SELECT id,$2,$3 FROM games WHERE id=$1 AND (black_id=$2 OR white_id=$2)`,
 		gameID, senderID, ct)
-	return mapErr(err)
+	if err != nil {
+		return mapErr(err)
+	}
+	if tag.RowsAffected() != 1 {
+		return ErrConflict
+	}
+	return nil
 }
 
-func (s *Store) Messages(ctx context.Context, gameID int64) ([]Message, error) {
+func (s *Store) Messages(ctx context.Context, gameID, after int64, limit int) ([]Message, error) {
+	if after < 0 || limit < 1 || limit > 100 {
+		return nil, ErrConflict
+	}
 	rows, err := s.Pool.Query(ctx,
-		`SELECT sender_id, ciphertext, created_at FROM messages WHERE game_id=$1 ORDER BY created_at ASC, id ASC`,
-		gameID)
+		`SELECT id, sender_id, ciphertext, created_at FROM messages WHERE game_id=$1 AND id>$2 ORDER BY id ASC LIMIT $3`,
+		gameID, after, limit)
 	if err != nil {
 		return nil, mapErr(err)
 	}
@@ -154,7 +224,7 @@ func (s *Store) Messages(ctx context.Context, gameID int64) ([]Message, error) {
 	var out []Message
 	for rows.Next() {
 		var m Message
-		if err := rows.Scan(&m.SenderID, &m.Ciphertext, &m.CreatedAt); err != nil {
+		if err := rows.Scan(&m.ID, &m.SenderID, &m.Ciphertext, &m.CreatedAt); err != nil {
 			return nil, mapErr(err)
 		}
 		out = append(out, m)

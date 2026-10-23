@@ -16,6 +16,8 @@ export async function init(ready) {
   await syncKeys(user, secret);
   const list = document.getElementById('games-list');
   const errEl = document.getElementById('lobby-error');
+  let before = 0, nextBefore = 0, refreshing = false;
+  const older = document.getElementById('games-older');
 
   const openGame = id => { location.href = `game.html?id=${encodeURIComponent(id)}`; };
   const fail = err => { errEl.textContent = err.message || 'Request failed'; };
@@ -48,19 +50,29 @@ export async function init(ready) {
     a.dataset.gameId = g.id;
     a.href = `game.html?id=${encodeURIComponent(g.id)}`;
     a.textContent = 'Open';
-    acts.appendChild(a);
+    if (g.can_view) acts.appendChild(a);
     tr.appendChild(acts);
     return tr;
   }
 
   async function refresh() {
+    if (refreshing) return;
+    refreshing = true;
+    const cursor = before;
     try {
-      const games = (await listGames()) || [];
+      const games = (await listGames(cursor)) || [];
+      if (cursor !== before) return;
       list.replaceChildren(...games.map(row));
+      nextBefore = games.length === 100 ? games[games.length - 1].id : 0;
+      older.disabled = !nextBefore;
     } catch (err) {
       if (err.status === 401) location.href = 'index.html';
+    } finally {
+      refreshing = false;
     }
   }
+  older.addEventListener('click', async () => { before = nextBefore; await refresh(); });
+  document.getElementById('games-latest').addEventListener('click', async () => { before = 0; await refresh(); });
 
   document.getElementById('create-game-btn').addEventListener('click', async () => {
     errEl.textContent = '';

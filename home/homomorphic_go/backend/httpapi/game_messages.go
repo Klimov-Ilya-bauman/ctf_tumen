@@ -9,10 +9,14 @@ const maxCiphertext = 8192
 
 func (a *API) moves(w http.ResponseWriter, r *http.Request) {
 	g, ok := a.loadGame(w, r)
+	if !ok || !requireParticipant(w, r, g) {
+		return
+	}
+	page, ok := pagination(w, r, "after")
 	if !ok {
 		return
 	}
-	ms, err := a.Store.Moves(r.Context(), g.ID)
+	ms, err := a.Store.Moves(r.Context(), g.ID, page.Cursor, page.Limit)
 	if err != nil {
 		writeStoreErr(w, err)
 		return
@@ -28,10 +32,14 @@ func (a *API) moves(w http.ResponseWriter, r *http.Request) {
 
 func (a *API) messages(w http.ResponseWriter, r *http.Request) {
 	g, ok := a.loadGame(w, r)
+	if !ok || !requireParticipant(w, r, g) {
+		return
+	}
+	page, ok := pagination(w, r, "after")
 	if !ok {
 		return
 	}
-	ms, err := a.Store.Messages(r.Context(), g.ID)
+	ms, err := a.Store.Messages(r.Context(), g.ID, page.Cursor, page.Limit)
 	if err != nil {
 		writeStoreErr(w, err)
 		return
@@ -39,7 +47,7 @@ func (a *API) messages(w http.ResponseWriter, r *http.Request) {
 	out := make([]map[string]any, 0, len(ms))
 	for _, m := range ms {
 		out = append(out, map[string]any{
-			"sender_id": m.SenderID, "ciphertext": m.Ciphertext, "created_at": m.CreatedAt.Format(time.RFC3339),
+			"id": m.ID, "sender_id": m.SenderID, "ciphertext": m.Ciphertext, "created_at": m.CreatedAt.Format(time.RFC3339),
 		})
 	}
 	writeJSON(w, http.StatusOK, out)

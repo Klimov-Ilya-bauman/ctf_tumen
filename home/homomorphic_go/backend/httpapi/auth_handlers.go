@@ -43,6 +43,11 @@ func decodePubkey(s string) ([]byte, bool) {
 	if err != nil || len(b) != pubkeyLen {
 		return nil, false
 	}
+	for _, v := range b {
+		if v == 0 || v >= 251 {
+			return nil, false
+		}
+	}
 	return b, true
 }
 
@@ -113,7 +118,7 @@ func (a *API) login(w http.ResponseWriter, r *http.Request) {
 		Value:    token,
 		Expires:  expires,
 		MaxAge:   int(ttl / time.Second),
-		Secure:   r.TLS != nil,
+		Secure:   a.SecureCookies || r.TLS != nil,
 		Path:     "/",
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
@@ -138,7 +143,7 @@ func (a *API) logout(w http.ResponseWriter, r *http.Request) {
 	}
 	http.SetCookie(w, &http.Cookie{
 		Name: "session", Value: "", Path: "/", HttpOnly: true,
-		Secure: r.TLS != nil, SameSite: http.SameSiteLaxMode,
+		Secure: a.SecureCookies || r.TLS != nil, SameSite: http.SameSiteLaxMode,
 		MaxAge: -1, Expires: time.Unix(1, 0),
 	})
 	writeJSON(w, http.StatusOK, struct{}{})

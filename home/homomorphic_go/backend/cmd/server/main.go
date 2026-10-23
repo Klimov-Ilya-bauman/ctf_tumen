@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -44,14 +45,42 @@ func main() {
 			log.Fatal("SESSION_TTL must be a positive duration of at least 1s")
 		}
 	}
-	api := &httpapi.API{Store: st, Tokens: auth.NewTokens(), SessionTTL: ttl, AllowOrigin: os.Getenv("ALLOW_ORIGIN")}
+	secureCookies := true
+	if value := os.Getenv("SESSION_COOKIE_SECURE"); value != "" {
+		var err error
+		secureCookies, err = strconv.ParseBool(value)
+		if err != nil {
+			log.Fatal("SESSION_COOKIE_SECURE must be true or false")
+		}
+	}
+	api := &httpapi.API{Store: st, Tokens: auth.NewTokens(), SessionTTL: ttl, SecureCookies: secureCookies, AllowOrigin: os.Getenv("ALLOW_ORIGIN")}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.Write([]byte("ok"))
 	})
-	mux.Handle("/", api.Routes())
+	mux.Handle("/", http.TimeoutHandler(api.Routes(), 15*time.Second, `{"error":"request timeout"}`))
 
-	srv := &http.Server{Addr: addr, Handler: mux, ReadHeaderTimeout: 5 * time.Second}
+	srv := &http.Server{Addr: addr, Handler: mux,
+		ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second,
+		WriteTimeout: 20 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16 << 10}
+	maintenance, stopMaintenance := context.WithCancel(context.Background())
+	defer stopMaintenance()
+	go func() {
+		ticker := time.NewTicker(time.Minute)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-maintenance.Done():
+				return
+			case <-ticker.C:
+				ctx, cancel := context.WithTimeout(maintenance, 5*time.Second)
+				if err := st.PurgeSessions(ctx); err != nil && maintenance.Err() == nil {
+					log.Print("session cleanup failed")
+				}
+				cancel()
+			}
+		}
+	}()
 
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)

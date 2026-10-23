@@ -20,6 +20,10 @@ services:
       DATABASE_URL: postgres://${POSTGRES_USER:-hgo}:${POSTGRES_PASSWORD:-hgo}@db:5432/${POSTGRES_DB:-hgo}?sslmode=disable
       ALLOW_ORIGIN: ${ALLOW_ORIGIN:-}
       LISTEN_ADDR: ":8080"
+      SESSION_TTL: ${SESSION_TTL:-12h}
+      # This compose file serves plain HTTP for local development.
+      # Set true when an HTTPS reverse proxy is configured.
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}
     depends_on:
       db:
         condition: service_healthy
