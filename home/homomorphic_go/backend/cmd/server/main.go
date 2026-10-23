@@ -36,7 +36,15 @@ func main() {
 	}
 	cancel()
 
-	api := &httpapi.API{Store: st, Tokens: auth.NewTokens(), AllowOrigin: os.Getenv("ALLOW_ORIGIN")}
+	ttl := 12 * time.Hour
+	if value := os.Getenv("SESSION_TTL"); value != "" {
+		var err error
+		ttl, err = time.ParseDuration(value)
+		if err != nil || ttl < time.Second {
+			log.Fatal("SESSION_TTL must be a positive duration of at least 1s")
+		}
+	}
+	api := &httpapi.API{Store: st, Tokens: auth.NewTokens(), SessionTTL: ttl, AllowOrigin: os.Getenv("ALLOW_ORIGIN")}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.Write([]byte("ok"))

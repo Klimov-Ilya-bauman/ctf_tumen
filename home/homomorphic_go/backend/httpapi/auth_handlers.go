@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"net/http"
+	"time"
 
 	"homomorphicgo/auth"
 	"homomorphicgo/store"
@@ -92,14 +93,55 @@ func (a *API) login(w http.ResponseWriter, r *http.Request) {
 		writeStoreErr(w, err)
 		return
 	}
+	token, err := a.Tokens.Issue()
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	hash, _ := auth.HashToken(token)
+	ttl := a.SessionTTL
+	if ttl <= 0 {
+		ttl = 12 * time.Hour
+	}
+	expires := time.Now().Add(ttl)
+	if err := a.Store.CreateSession(r.Context(), hash, u.ID, expires); err != nil {
+		writeStoreErr(w, err)
+		return
+	}
 	http.SetCookie(w, &http.Cookie{
 		Name:     "session",
-		Value:    a.Tokens.Issue(u.ID),
+		Value:    token,
+		Expires:  expires,
+		MaxAge:   int(ttl / time.Second),
+		Secure:   r.TLS != nil,
 		Path:     "/",
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
 	})
 	writeJSON(w, http.StatusOK, map[string]int64{"user_id": u.ID})
+}
+
+func (a *API) logout(w http.ResponseWriter, r *http.Request) {
+	c, err := r.Cookie("session")
+	if err != nil {
+		writeErr(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	hash, ok := auth.HashToken(c.Value)
+	if !ok {
+		writeErr(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	if err := a.Store.DeleteSession(r.Context(), hash); err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	http.SetCookie(w, &http.Cookie{
+		Name: "session", Value: "", Path: "/", HttpOnly: true,
+		Secure: r.TLS != nil, SameSite: http.SameSiteLaxMode,
+		MaxAge: -1, Expires: time.Unix(1, 0),
+	})
+	writeJSON(w, http.StatusOK, struct{}{})
 }
 
 func (a *API) me(w http.ResponseWriter, r *http.Request) {

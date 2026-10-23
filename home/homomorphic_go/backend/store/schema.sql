@@ -23,6 +23,11 @@ CREATE TABLE IF NOT EXISTS games (
 	updated_at timestamptz DEFAULT now()
 );
 
+-- Existing legacy sessions have NULL expiry and are rejected on lookup.
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS expires_at timestamptz;
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS revoked_at timestamptz;
+ALTER TABLE games ADD COLUMN IF NOT EXISTS version bigint NOT NULL DEFAULT 0;
+
 CREATE TABLE IF NOT EXISTS moves (
 	id bigserial PRIMARY KEY,
 	game_id bigint NOT NULL REFERENCES games(id),

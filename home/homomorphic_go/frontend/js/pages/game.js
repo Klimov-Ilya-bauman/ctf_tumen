@@ -157,10 +157,11 @@ export async function init(ready) {
       const prevC = g.board_c_b64 ? b64dec(g.board_c_b64) : new Uint8Array(361);
       const { C2, M2 } = computeNextC(prevC, st.M, r, c, st.color, st.S);
       const cb = b64enc(C2);
-      await postMove(id, cb);
+      await postMove(id, cb, g.version);
       st.moveSeq++;
       st.game.board_c_b64 = cb;
       st.game.turn = st.game.turn === 0 ? 1 : 0;
+      st.game.version++;
       st.M = M2;
       st.error = '';
       saveBoard(id, M2);

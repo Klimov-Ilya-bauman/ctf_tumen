@@ -6,12 +6,16 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"time"
 
 	"homomorphicgo/auth"
 	"homomorphicgo/store"
 )
 
 type StoreIface interface {
+	CreateSession(context.Context, string, int64, time.Time) error
+	SessionUser(context.Context, string) (int64, error)
+	DeleteSession(context.Context, string) error
 	CreateUser(ctx context.Context, username, passHash string) (int64, error)
 	UserByUsername(ctx context.Context, username string) (*store.User, error)
 	UserByID(ctx context.Context, id int64) (*store.User, error)
@@ -20,7 +24,7 @@ type StoreIface interface {
 	JoinGame(ctx context.Context, gameID, whiteID int64) error
 	GetGame(ctx context.Context, id int64) (*store.Game, error)
 	ListGames(ctx context.Context) ([]store.Game, error)
-	ApplyMove(ctx context.Context, gameID int64, boardC []byte) error
+	ApplyMove(ctx context.Context, gameID, userID, version int64, boardC []byte) error
 	Moves(ctx context.Context, gameID int64) ([]store.Move, error)
 	AddMessage(ctx context.Context, gameID, senderID int64, ct string) error
 	Messages(ctx context.Context, gameID int64) ([]store.Message, error)
@@ -30,6 +34,7 @@ type API struct {
 	Store       StoreIface
 	Tokens      *auth.Tokens
 	AllowOrigin string
+	SessionTTL  time.Duration
 }
 
 const maxBody = 64 << 10
@@ -42,6 +47,7 @@ func (a *API) Routes() http.Handler {
 		mux.Handle(pattern, a.requireAuth(h))
 	}
 	authed("GET /api/me", a.me)
+	authed("POST /api/logout", a.logout)
 	authed("POST /api/keys", a.keys)
 	authed("GET /api/games", a.listGames)
 	authed("POST /api/games", a.createGame)
@@ -86,6 +92,7 @@ func (a *API) originAllowed(origin string) bool {
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(v)
 }

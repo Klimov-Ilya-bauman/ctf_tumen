@@ -1,11 +1,10 @@
 package auth
 
 import (
+	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
-	"fmt"
-	"strconv"
-	"strings"
-	"sync/atomic"
+	"encoding/hex"
 
 	"golang.org/x/crypto/bcrypt"
 )
@@ -22,34 +21,26 @@ func CheckPassword(hash, pw string) bool {
 	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(pw)) == nil
 }
 
-type Tokens struct {
-	counter uint64
-}
+type Tokens struct{}
 
 func NewTokens() *Tokens {
 	return &Tokens{}
 }
 
-func (t *Tokens) Issue(userID int64) string {
-	return base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%d:%d", userID, atomic.AddUint64(&t.counter, 1))))
+func (t *Tokens) Issue() (string, error) {
+	var raw [32]byte
+	if _, err := rand.Read(raw[:]); err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(raw[:]), nil
 }
 
-func (t *Tokens) Parse(token string) (userID int64, ok bool) {
-	raw, err := base64.StdEncoding.DecodeString(token)
-	if err != nil {
-		return 0, false
+// HashToken rejects legacy and noncanonical tokens. Only the digest is persisted.
+func HashToken(token string) (string, bool) {
+	raw, err := base64.RawURLEncoding.DecodeString(token)
+	if err != nil || len(raw) != 32 || base64.RawURLEncoding.EncodeToString(raw) != token {
+		return "", false
 	}
-	s := string(raw)
-	idx := strings.IndexByte(s, ':')
-	if idx < 0 {
-		return 0, false
-	}
-	uid, err := strconv.ParseInt(s[:idx], 10, 64)
-	if err != nil || uid <= 0 {
-		return 0, false
-	}
-	if _, err := strconv.ParseUint(s[idx+1:], 10, 64); err != nil {
-		return 0, false
-	}
-	return uid, true
+	h := sha256.Sum256([]byte(token))
+	return hex.EncodeToString(h[:]), true
 }

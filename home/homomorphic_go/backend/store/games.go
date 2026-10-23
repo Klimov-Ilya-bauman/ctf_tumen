@@ -13,6 +13,7 @@ type Game struct {
 	Status      string
 	BoardC      []byte
 	Turn        int16
+	Version     int64
 }
 
 type Move struct {
@@ -27,11 +28,11 @@ type Message struct {
 	CreatedAt  time.Time
 }
 
-const gameCols = `id, black_id, white_id, status, board_c, turn`
+const gameCols = `id, black_id, white_id, status, board_c, turn, version`
 
 func scanGame(row pgx.Row) (Game, error) {
 	var g Game
-	err := row.Scan(&g.ID, &g.BlackID, &g.WhiteID, &g.Status, &g.BoardC, &g.Turn)
+	err := row.Scan(&g.ID, &g.BlackID, &g.WhiteID, &g.Status, &g.BoardC, &g.Turn, &g.Version)
 	return g, err
 }
 
@@ -48,7 +49,7 @@ func (s *Store) CreateGame(ctx context.Context, blackID int64) (int64, error) {
 
 func (s *Store) JoinGame(ctx context.Context, gameID, whiteID int64) error {
 	tag, err := s.Pool.Exec(ctx,
-		`UPDATE games SET white_id=$1,status='active' WHERE id=$2 AND white_id IS NULL AND status='waiting'`,
+		`UPDATE games SET white_id=$1,status='active',version=version+1 WHERE id=$2 AND white_id IS NULL AND status='waiting' AND black_id<>$1`,
 		whiteID, gameID)
 	if err != nil {
 		return mapErr(err)
@@ -88,19 +89,25 @@ func (s *Store) ListGames(ctx context.Context) ([]Game, error) {
 	return out, mapErr(rows.Err())
 }
 
-func (s *Store) ApplyMove(ctx context.Context, gameID int64, boardC []byte) error {
+func (s *Store) ApplyMove(ctx context.Context, gameID, userID, version int64, boardC []byte) error {
+	if len(boardC) != 361 {
+		return ErrConflict
+	}
 	tx, err := s.Pool.Begin(ctx)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback(ctx)
 	tag, err := tx.Exec(ctx,
-		`UPDATE games SET board_c=$1, turn=1-turn, updated_at=now() WHERE id=$2`, boardC, gameID)
+		`UPDATE games SET board_c=$1, turn=1-turn, version=version+1, updated_at=now()
+		 WHERE id=$2 AND status='active' AND white_id IS NOT NULL AND version=$4
+		 AND (black_id=$3 OR white_id=$3)
+		 AND ((turn=0 AND black_id=$3) OR (turn=1 AND white_id=$3))`, boardC, gameID, userID, version)
 	if err != nil {
 		return mapErr(err)
 	}
 	if tag.RowsAffected() == 0 {
-		return ErrNotFound
+		return ErrConflict
 	}
 	_, err = tx.Exec(ctx,
 		`INSERT INTO moves(game_id, seq, board_c)

@@ -157,7 +157,7 @@ func (a *API) getGame(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"id": g.ID, "black": black, "white": white, "status": g.Status,
-		"turn": g.Turn, "board_c_b64": b64(g.BoardC),
+		"turn": g.Turn, "version": g.Version, "board_c_b64": b64(g.BoardC),
 	})
 }
 
@@ -170,12 +170,17 @@ func (a *API) move(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusForbidden, "not a participant")
 		return
 	}
-	if g.Status == "finished" {
-		writeErr(w, http.StatusConflict, "game finished")
+	if g.Status != "active" || g.WhiteID == nil {
+		writeErr(w, http.StatusConflict, "game not active")
+		return
+	}
+	if (g.Turn == 0 && g.BlackID != userID(r)) || (g.Turn == 1 && *g.WhiteID != userID(r)) {
+		writeErr(w, http.StatusConflict, "not your turn")
 		return
 	}
 	var req struct {
 		BoardCB64 string `json:"board_c_b64"`
+		Version   *int64 `json:"version"`
 	}
 	if !decodeJSON(w, r, &req) {
 		return
@@ -185,7 +190,12 @@ func (a *API) move(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "board_c_b64 must decode to 361 bytes")
 		return
 	}
-	if err := a.Store.ApplyMove(r.Context(), g.ID, board); err != nil {
+	// Legacy callers still receive a CAS against the snapshot read above.
+	version := g.Version
+	if req.Version != nil {
+		version = *req.Version
+	}
+	if err := a.Store.ApplyMove(r.Context(), g.ID, userID(r), version, board); err != nil {
 		writeStoreErr(w, err)
 		return
 	}
