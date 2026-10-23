@@ -95,16 +95,21 @@ func TestGameUsesSnapshotKey(t *testing.T) {
 	}
 }
 
-func TestMoveRequiresVersion(t *testing.T) {
+func TestMoveVersionCompatibility(t *testing.T) {
 	white := int64(8)
 	board := base64.StdEncoding.EncodeToString(make([]byte, 361))
-	for _, version := range []string{"", `,"version":null`, `,"version":-1`} {
+	for _, tc := range []struct {
+		field       string
+		want, calls int
+	}{
+		{"", 200, 1}, {`,"version":null`, 200, 1}, {`,"version":-1`, 400, 0},
+	} {
 		a, s, token := gameTestAPI(t, &store.Game{ID: 1, BlackID: 7, WhiteID: &white, Status: "active"})
-		r := httptest.NewRequest("POST", "/api/games/1/move", strings.NewReader(`{"board_c_b64":"`+board+`"`+version+`}`))
+		r := httptest.NewRequest("POST", "/api/games/1/move", strings.NewReader(`{"board_c_b64":"`+board+`"`+tc.field+`}`))
 		r.AddCookie(&http.Cookie{Name: "session", Value: token})
 		w := httptest.NewRecorder()
 		a.Routes().ServeHTTP(w, r)
-		if w.Code != 400 || s.moveCalls != 0 {
+		if w.Code != tc.want || s.moveCalls != tc.calls {
 			t.Fatalf("status %d calls %d", w.Code, s.moveCalls)
 		}
 	}
@@ -131,6 +136,31 @@ func TestCrossOriginWritesRejected(t *testing.T) {
 	a.Routes().ServeHTTP(w, r)
 	if w.Code != 403 {
 		t.Fatalf("status %d", w.Code)
+	}
+}
+
+func TestBrowserOriginOnPublishedPort(t *testing.T) {
+	a := &API{}
+	for _, tc := range []struct {
+		name, host, origin string
+		want               int
+	}{
+		{"published port preserved", "127.0.0.1:8081", "http://127.0.0.1:8081", 204},
+		{"port stripped by proxy", "127.0.0.1", "http://127.0.0.1:8081", 403},
+		{"different port", "127.0.0.1:8081", "http://127.0.0.1:8082", 403},
+		{"untrusted host", "127.0.0.1:8081", "https://untrusted.invalid", 403},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := httptest.NewRequest("POST", "http://"+tc.host+"/api/register", nil)
+			r.Header.Set("Origin", tc.origin)
+			w := httptest.NewRecorder()
+			a.cors(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(http.StatusNoContent)
+			})).ServeHTTP(w, r)
+			if w.Code != tc.want {
+				t.Fatalf("status %d, want %d", w.Code, tc.want)
+			}
+		})
 	}
 }
 

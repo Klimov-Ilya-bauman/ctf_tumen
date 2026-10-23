@@ -279,7 +279,7 @@ func TestLegacyUpgradeAndSessionCleanup(t *testing.T) {
 		t.Fatal(err)
 	}
 	key := bytes.Repeat([]byte{7}, 19)
-	if err := s.SetPubkey(ctx, uid, key); err != nil {
+	if _, err := s.Pool.Exec(ctx, `UPDATE users SET pubkey=$1 WHERE id=$2`, key, uid); err != nil {
 		t.Fatal(err)
 	}
 	var gameID int64

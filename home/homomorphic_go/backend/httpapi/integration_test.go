@@ -110,13 +110,28 @@ func TestHTTPDatabaseLifecycle(t *testing.T) {
 		t.Fatal("account key changed game")
 	}
 	board := base64.StdEncoding.EncodeToString(make([]byte, 361))
-	request("POST", "/api/games/1/move", map[string]any{"board_c_b64": board}, black, 400)
+	request("POST", "/api/games/1/move", map[string]any{"board_c_b64": board, "version": -1}, black, 400)
 	request("POST", "/api/games/1/move", map[string]any{"board_c_b64": board, "version": g.Version}, outsider, 403)
 	request("POST", "/api/games/1/move", map[string]any{"board_c_b64": board, "version": g.Version}, white, 409)
 	request("POST", "/api/games/1/move", map[string]any{"board_c_b64": board, "version": g.Version}, black, 200)
 	request("POST", "/api/games/1/move", map[string]any{"board_c_b64": board, "version": g.Version}, white, 409)
+	request("POST", "/api/games/1/move", map[string]any{"board_c_b64": board}, white, 200)
 	request("POST", "/api/games/1/messages", map[string]string{"ciphertext": "synthetic-test-ciphertext"}, black, 201)
 	request("GET", "/api/games/1/messages?limit=1", nil, white, 200)
 	request("POST", "/api/logout", nil, black, 200)
 	request("GET", "/api/me", nil, black, 401)
+	// Original clients can create/join first, install keys later, and omit version.
+	legacyBlack := login("legacyblack")
+	legacyWhite := login("legacywhite")
+	request("POST", "/api/games", map[string]any{}, legacyBlack, 201)
+	request("POST", "/api/games/2/join", map[string]any{}, legacyWhite, 200)
+	request("POST", "/api/keys", map[string]string{"pubkey_b64": key}, legacyBlack, 200)
+	request("POST", "/api/keys", map[string]string{"pubkey_b64": key}, legacyWhite, 200)
+	legacyGame, err := s.GetGame(ctx, 2)
+	if err != nil || base64.StdEncoding.EncodeToString(legacyGame.BlackPubkey) != key || base64.StdEncoding.EncodeToString(legacyGame.WhitePubkey) != key {
+		t.Fatalf("late key initialization failed: %v", err)
+	}
+	request("POST", "/api/games/2/move", map[string]any{"board_c_b64": board}, legacyBlack, 200)
+	request("POST", "/api/games/2/move", map[string]any{"board_c_b64": board}, legacyWhite, 200)
+	request("GET", "/api/games/2", nil, outsider, 403)
 }

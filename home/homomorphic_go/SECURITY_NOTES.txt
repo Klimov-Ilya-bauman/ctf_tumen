@@ -3,9 +3,13 @@ Local hardening status (changes after commit 1b13614)
 Implemented:
 - Sensitive game reads require participation. Public game listings no longer offer
   an Open link for unrelated accounts. Waiting games can still be joined.
-- Move version is mandatory. Existing atomic actor/status/turn/version guards remain.
+- Move version is optional for compatibility with original clients. When omitted,
+  the loaded game version is used for the atomic actor/status/turn/version guard.
+  Explicit stale versions still fail. Legacy requests do not prevent later replay.
 - Account public keys are snapshotted per game. Create/join and key updates commit
   together; failed joins roll back the account-key update as well.
+- Creation/join before key installation is supported again. POST /api/keys fills
+  missing participant snapshots once and never overwrites initialized snapshots.
 - Existing games snapshot CURRENT account keys once on migration. This cannot
   reconstruct an original key that was already overwritten before this patch.
 - Browser private keys are archived on rotation so existing game snapshots remain
@@ -18,10 +22,11 @@ Implemented:
 - HTTP request/body/header/idle timeouts and bounded bodies/headers are configured.
 - Cross-origin browser writes are rejected unless explicitly allowed. A request
   body must contain exactly one JSON value.
-- nginx limits login to 30 requests/minute/IP with burst 10, registration to
-  10 requests/minute/IP with burst 5. These are defensive engineering settings,
-  NOT verified tournament limits. Adjust for the actual NAT/checker environment.
-  Limits require nginx; do not publish the backend port directly.
+- nginx records login/registration limit excesses in DRY-RUN mode. It does not
+  reject requests with 429: logs showed one source address shared by many clients,
+  and its ownership is unknown. Do not trust client-supplied forwarding headers.
+- nginx forwards Host with its published port using $http_host; using $host had
+  caused legitimate browser registration to fail the Origin check with 403.
 
 Transport:
 - Backend SESSION_COOKIE_SECURE defaults to true, independently of proxy TLS.
@@ -44,6 +49,7 @@ Validation performed using Go 1.27.3 and an isolated LOCAL PostgreSQL 18.4:
 - go test -v ./... with TEST_DATABASE_URL set: PASS, no skipped integration tests.
 - go vet ./...: PASS.
 - go build ./cmd/server (output outside source tree): PASS.
+- Linux CGO_ENABLED=0 build after availability fixes: PASS.
 - node --test tests/client-security.test.mjs tests/crypto-audit.test.mjs: 4 PASS.
   The crypto-audit test is a demonstration of an UNFIXED vulnerability.
 - JavaScript syntax and git diff --check: PASS.
@@ -54,4 +60,5 @@ authorized local PostgreSQL database. Tests create and drop only their own rando
 schemas, and use synthetic users/data. Without TEST_DATABASE_URL, Go integration
 tests SKIP; a green unit-only result must not be called a full security validation.
 
-No commit, push, production deployment, external attack, or jury submission made.
+This availability-fix run made no commit, push, production deployment, external
+attack, or jury submission. Judge UP status is not verified by local tests.

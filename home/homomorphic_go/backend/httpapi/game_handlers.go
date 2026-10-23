@@ -191,8 +191,8 @@ func (a *API) move(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &req) {
 		return
 	}
-	if req.Version == nil || *req.Version < 0 {
-		writeErr(w, http.StatusBadRequest, "version is required and must be nonnegative")
+	if req.Version != nil && *req.Version < 0 {
+		writeErr(w, http.StatusBadRequest, "version must be nonnegative")
 		return
 	}
 	board, err := base64.StdEncoding.DecodeString(req.BoardCB64)
@@ -200,7 +200,12 @@ func (a *API) move(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "board_c_b64 must decode to 361 bytes")
 		return
 	}
-	if err := a.Store.ApplyMove(r.Context(), g.ID, userID(r), *req.Version, board); err != nil {
+	// Legacy clients omit version. They still get a CAS against the loaded snapshot.
+	version := g.Version
+	if req.Version != nil {
+		version = *req.Version
+	}
+	if err := a.Store.ApplyMove(r.Context(), g.ID, userID(r), version, board); err != nil {
 		writeStoreErr(w, err)
 		return
 	}

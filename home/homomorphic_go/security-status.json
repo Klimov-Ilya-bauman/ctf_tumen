@@ -1,5 +1,5 @@
 {
-  "recorded_at": "2026-10-23T07:40:06Z",
+  "recorded_at": "2026-10-23T09:28:27Z",
   "state": "WAITING_FOR_USER",
   "base_commit": "1b1361467c84a2e3d902919c01db188c3c5ac188",
   "config_commit": null,
@@ -30,11 +30,25 @@
         "frontend/js/pages/lobby.js"
       ],
       "config_commit": null
+    },
+    {
+      "question_id": "runtime-availability-001",
+      "answer": "User does not know client IP ownership and has no checker diagnostic messages; explicitly requests availability fixes. Restore original request compatibility while retaining access control.",
+      "answered_by": "user",
+      "answered_at": null,
+      "answer_source": "Current conversation",
+      "applied_to": [
+        "frontend/nginx.conf",
+        "backend/store/games.go",
+        "backend/store/users.go",
+        "backend/httpapi/game_handlers.go"
+      ],
+      "config_commit": null
     }
   ],
   "implemented": [
     "Participant-only GET game, move history and messages",
-    "Mandatory nonnegative move version, atomic database actor/status/turn/CAS checks",
+    "Optional legacy version with snapshot CAS; explicit versions remain validated",
     "Per-game frozen public-key snapshots, atomic create/join/account-key update",
     "Private-key history for browser account-key rotation",
     "Cursor pagination with a maximum of 100 records per response",
@@ -42,7 +56,7 @@
     "Bounded expired/revoked/legacy session cleanup",
     "Independent Secure cookie configuration, request/connection timeouts",
     "Browser-origin checks and rejection of trailing JSON values",
-    "nginx per-client login/registration limits"
+    "nginx per-client login/registration limit observation, no rejection"
   ],
   "runtime_verified": {
     "go": "go1.27.3 windows/amd64",
@@ -106,5 +120,43 @@
       "needs": "Checker or official flag storage/compatibility requirements"
     }
   ],
-  "notes_file": "SECURITY_NOTES.txt"
+  "notes_file": "SECURITY_NOTES.txt",
+  "availability_hotfix": {
+    "source": "User-provided deployment logs and instruction to prioritize service availability; client IP ownership and checker diagnostics unavailable",
+    "changes": [
+      "Preserve original Host including published port in all nginx proxy locations",
+      "Use nginx limit_req_dry_run to avoid rejecting shared-address clients",
+      "Restore original create/join-before-key workflow; initialize missing snapshots once",
+      "Accept absent move version with snapshot CAS; explicit stale versions still rejected"
+    ],
+    "verified": [
+      {
+        "command": "go test -count=1 -v ./...",
+        "exit_code": 0,
+        "integration_database": "isolated LOCAL PostgreSQL 18.4; no integration skips"
+      },
+      {
+        "command": "go test -count=1 ./httpapi -run TestHTTPDatabaseLifecycle",
+        "exit_code": 0
+      },
+      {
+        "command": "go vet ./...",
+        "exit_code": 0
+      },
+      {
+        "command": "GOOS=linux CGO_ENABLED=0 go build -trimpath ./cmd/server",
+        "exit_code": 0
+      }
+    ],
+    "nginx_execution": "NOT_EXECUTED locally; changed config must be tested on deployment",
+    "judge_up": "UNKNOWN: no access to deployed service/checker status",
+    "committed": false,
+    "pushed": false,
+    "deployed": false,
+    "residual_risks": [
+      "Legacy move requests can replay a board on a later valid turn",
+      "Weak legacy cryptography remains unchanged",
+      "Shared-IP login/registration throttling is observation-only"
+    ]
+  }
 }

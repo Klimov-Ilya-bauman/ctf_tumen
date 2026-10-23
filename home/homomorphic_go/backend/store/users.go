@@ -1,6 +1,9 @@
 package store
 
-import "context"
+import (
+	"context"
+	"github.com/jackc/pgx/v5"
+)
 
 type User struct {
 	ID       int64
@@ -40,12 +43,36 @@ func (s *Store) UserByID(ctx context.Context, id int64) (*User, error) {
 }
 
 func (s *Store) SetPubkey(ctx context.Context, userID int64, pub []byte) error {
-	tag, err := s.Pool.Exec(ctx, `UPDATE users SET pubkey=$1 WHERE id=$2`, pub, userID)
+	if !validGameKey(pub) {
+		return ErrConflict
+	}
+	tx, err := s.Pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	if err := setUserKey(ctx, tx, userID, pub); err != nil {
+		return err
+	}
+	return mapErr(tx.Commit(ctx))
+}
+
+func setUserKey(ctx context.Context, tx pgx.Tx, userID int64, pub []byte) error {
+	tag, err := tx.Exec(ctx, `UPDATE users SET pubkey=$1 WHERE id=$2`, pub, userID)
 	if err != nil {
 		return mapErr(err)
 	}
 	if tag.RowsAffected() == 0 {
 		return ErrNotFound
+	}
+	// Initialize missing snapshots once, without replacing keys of existing games.
+	if _, err := tx.Exec(ctx, `UPDATE games SET black_pubkey=$1
+		WHERE black_id=$2 AND black_pubkey IS NULL`, pub, userID); err != nil {
+		return mapErr(err)
+	}
+	if _, err := tx.Exec(ctx, `UPDATE games SET white_pubkey=$1
+		WHERE white_id=$2 AND white_pubkey IS NULL`, pub, userID); err != nil {
+		return mapErr(err)
 	}
 	return nil
 }

@@ -48,12 +48,13 @@ func gameKey(ctx context.Context, tx pgx.Tx, userID int64, supplied []byte) ([]b
 	if supplied != nil {
 		key = supplied
 	}
-	if !validGameKey(key) {
+	// The original API allows creating/joining before POST /api/keys.
+	if key != nil && !validGameKey(key) {
 		return nil, ErrConflict
 	}
 	if supplied != nil {
-		if _, err := tx.Exec(ctx, `UPDATE users SET pubkey=$1 WHERE id=$2`, key, userID); err != nil {
-			return nil, mapErr(err)
+		if err := setUserKey(ctx, tx, userID, key); err != nil {
+			return nil, err
 		}
 	}
 	return key, nil
@@ -103,8 +104,7 @@ func (s *Store) JoinGame(ctx context.Context, gameID, whiteID int64, pub []byte)
 	}
 	tag, err := tx.Exec(ctx,
 		`UPDATE games SET white_id=$1,status='active',version=version+1,white_pubkey=$3
-		 WHERE id=$2 AND white_id IS NULL AND status='waiting' AND black_id<>$1
-		 AND black_pubkey IS NOT NULL`, whiteID, gameID, key)
+		 WHERE id=$2 AND white_id IS NULL AND status='waiting' AND black_id<>$1`, whiteID, gameID, key)
 	if err != nil {
 		return mapErr(err)
 	}
